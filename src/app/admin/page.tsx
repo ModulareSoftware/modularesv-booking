@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
-import { Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getVigencyEnd, fmtDisplay } from '@/lib/supabase'
+import { useRouter } from 'next/navigation'
+import { supabase, Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getVigencyEnd, fmtDisplay, ADMIN_EMAIL } from '@/lib/supabase'
 
 const ADMIN_SECRET = 'Modular2024!'
 const DAYS_ES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
@@ -10,6 +11,7 @@ function authHeaders() {
 }
 
 export default function AdminPage() {
+  const router = useRouter()
   const [tab, setTab] = useState<'calendar' | 'clients' | 'reservations'>('calendar')
   const [clients, setClients] = useState<Client[]>([])
   const [reservations, setReservations] = useState<Reservation[]>([])
@@ -20,11 +22,23 @@ export default function AdminPage() {
   const [filterClient, setFilterClient] = useState('')
   const [alert, setAlert] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null)
 
+  useEffect(() => {
+    async function checkAuth() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user || user.email !== ADMIN_EMAIL) {
+        router.push('/login')
+      }
+    }
+    checkAuth()
+  }, [router])
+
+  async function logout() {
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
+
   const loadData = useCallback(async () => {
-    const [cRes, rRes] = await Promise.all([
-      fetch('/api/clients'),
-      fetch('/api/reservations'),
-    ])
+    const [cRes, rRes] = await Promise.all([fetch('/api/clients'), fetch('/api/reservations')])
     setClients(await cRes.json())
     setReservations(await rRes.json())
     setLoading(false)
@@ -74,67 +88,48 @@ export default function AdminPage() {
     night:     'bg-amber-50 border-amber-300 text-amber-800',
   }
 
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center text-slate-400">
-      Cargando datos…
-    </div>
-  )
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-slate-400">Cargando datos…</div>
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Nav */}
       <nav className="bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3 flex-wrap">
-        <a href="/" className="font-semibold text-slate-800 mr-auto" style={{ fontFamily: 'Fraunces, serif' }}>
-          Modulare BR
-        </a>
-        <span className="text-xs text-slate-400 bg-blue-50 text-blue-600 px-2 py-1 rounded-full">Admin</span>
+        <span className="font-semibold text-slate-800 mr-auto" style={{ fontFamily: 'Fraunces, serif' }}>Modulare BR</span>
+        <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full">Admin</span>
         {(['calendar', 'clients', 'reservations'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`text-sm px-3 py-1.5 rounded-lg transition-all ${tab === t ? 'bg-slate-100 font-medium' : 'text-slate-500 hover:text-slate-700'}`}>
             {t === 'calendar' ? '📅 Calendario' : t === 'clients' ? '👥 Clientes' : '📋 Reservas'}
           </button>
         ))}
-        <button onClick={() => setShowNewClient(true)}
-          className="bg-blue-600 text-white text-sm px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors">
-          + Cliente
-        </button>
+        <button onClick={() => setShowNewClient(true)} className="bg-blue-600 text-white text-sm px-3 py-1.5 rounded-lg hover:bg-blue-700">+ Cliente</button>
+        <button onClick={logout} className="text-xs text-slate-400 hover:text-slate-600">Salir</button>
       </nav>
 
       {alert && (
         <div className={`mx-4 mt-4 p-3 rounded-xl text-sm ${alert.type === 'ok' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
-          {alert.msg}
-          <button onClick={() => setAlert(null)} className="ml-2 opacity-50 hover:opacity-100">✕</button>
+          {alert.msg} <button onClick={() => setAlert(null)} className="ml-2 opacity-50">✕</button>
         </div>
       )}
 
       <div className="p-4 max-w-6xl mx-auto">
-
-        {/* ── CALENDAR TAB ── */}
         {tab === 'calendar' && (
           <div className="bg-white rounded-2xl border border-slate-200 p-4">
             <div className="flex items-center gap-2 mb-4">
               <h2 className="font-semibold text-slate-700 mr-auto">
-                {weekDays[0].toLocaleDateString('es-SV', { day: 'numeric', month: 'short' })} –{' '}
-                {weekDays[5].toLocaleDateString('es-SV', { day: 'numeric', month: 'short', year: 'numeric' })}
+                {weekDays[0].toLocaleDateString('es-SV', { day: 'numeric', month: 'short' })} – {weekDays[5].toLocaleDateString('es-SV', { day: 'numeric', month: 'short', year: 'numeric' })}
               </h2>
               <button onClick={() => setWeekOffset(w => w - 1)} className="p-1.5 rounded-lg hover:bg-slate-100">‹</button>
               <button onClick={() => setWeekOffset(0)} className="text-xs px-2 py-1.5 rounded-lg hover:bg-slate-100">Hoy</button>
               <button onClick={() => setWeekOffset(w => w + 1)} className="p-1.5 rounded-lg hover:bg-slate-100">›</button>
-              <button onClick={() => setShowNewRes({})} className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700">
-                + Reserva
-              </button>
+              <button onClick={() => setShowNewRes({})} className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700">+ Reserva</button>
             </div>
-
-            {/* Grid */}
             <div className="grid gap-1" style={{ gridTemplateColumns: '72px repeat(6, 1fr)' }}>
               <div />
               {weekDays.map(d => (
                 <div key={d.toISOString()} className={`text-center text-xs font-medium py-1 rounded-lg ${fmtDate(d) === todayStr ? 'bg-blue-50 text-blue-600' : 'text-slate-400'}`}>
-                  {DAYS_ES[d.getDay()]}<br />
-                  <span className="font-semibold text-sm">{d.getDate()}</span>
+                  {DAYS_ES[d.getDay()]}<br /><span className="font-semibold text-sm">{d.getDate()}</span>
                 </div>
               ))}
-
               {(['morning', 'afternoon', 'night'] as const).map(slot => (
                 <>
                   <div key={slot + '-label'} className="flex items-center justify-end pr-2 text-xs text-slate-400">
@@ -147,22 +142,15 @@ export default function AdminPage() {
                     return (
                       <div key={dateStr + slot}
                         onClick={() => res ? deleteReservation(res.id) : setShowNewRes({ date: dateStr, slot })}
-                        className={`min-h-14 rounded-xl border cursor-pointer transition-all flex flex-col items-center justify-center text-center p-1
-                          ${res ? slotColors[slot] : 'border-slate-100 bg-slate-50 hover:border-blue-300 hover:bg-blue-50'}`}
-                        title={res ? `${client?.name} — clic para cancelar` : 'Clic para reservar'}
-                      >
-                        {client ? (
-                          <span className="text-xs font-medium leading-tight">{client.name.split(' ')[0]}</span>
-                        ) : (
-                          <span className="text-slate-200 text-lg">+</span>
-                        )}
+                        className={`min-h-14 rounded-xl border cursor-pointer transition-all flex flex-col items-center justify-center text-center p-1 ${res ? slotColors[slot] : 'border-slate-100 bg-slate-50 hover:border-blue-300 hover:bg-blue-50'}`}
+                        title={res ? `${client?.name} — clic para cancelar` : 'Clic para reservar'}>
+                        {client ? <span className="text-xs font-medium leading-tight">{client.name.split(' ')[0]}</span> : <span className="text-slate-200 text-lg">+</span>}
                       </div>
                     )
                   })}
                 </>
               ))}
             </div>
-
             <div className="flex gap-4 mt-3 text-xs text-slate-400 flex-wrap">
               <span><span className="inline-block w-3 h-3 rounded bg-blue-200 mr-1" />Mañana</span>
               <span><span className="inline-block w-3 h-3 rounded bg-green-200 mr-1" />Tarde</span>
@@ -172,11 +160,10 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ── CLIENTS TAB ── */}
         {tab === 'clients' && (
           <div className="bg-white rounded-2xl border border-slate-200 p-4">
             <h2 className="font-semibold text-slate-700 mb-4">Clientes registrados</h2>
-            {clients.length === 0 && <p className="text-slate-400 text-sm text-center py-8">Sin clientes. Agrega uno con el botón "+ Cliente"</p>}
+            {clients.length === 0 && <p className="text-slate-400 text-sm text-center py-8">Sin clientes. Agrega uno con "+ Cliente"</p>}
             <div className="space-y-3">
               {clients.map(c => {
                 const { used, nights, total, remaining } = getClientUsage(c)
@@ -188,7 +175,7 @@ export default function AdminPage() {
                 return (
                   <div key={c.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:border-slate-200">
                     <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-semibold flex-shrink-0">
-                      {c.name.split(' ').map(x => x[0]).slice(0, 2).join('')}
+                      {c.name.split(' ').map((x: string) => x[0]).slice(0, 2).join('')}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -200,9 +187,8 @@ export default function AdminPage() {
                         {used}/{total} bloques · vence {end.toLocaleDateString('es-SV')}
                         {nights > 0 && ` · ${nights} noches extra ($${nightCost})`}
                       </div>
-                      <div className="mt-1.5 h-1.5 bg-slate-100 rounded-full overflow-hidden w-full">
-                        <div className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-red-400' : pct >= 75 ? 'bg-amber-400' : 'bg-blue-400'}`}
-                          style={{ width: `${pct}%` }} />
+                      <div className="mt-1.5 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${pct >= 100 ? 'bg-red-400' : pct >= 75 ? 'bg-amber-400' : 'bg-blue-400'}`} style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                     <div className="text-right flex-shrink-0">
@@ -218,7 +204,6 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ── RESERVATIONS TAB ── */}
         {tab === 'reservations' && (
           <div className="bg-white rounded-2xl border border-slate-200 p-4">
             <div className="flex items-center gap-3 mb-4 flex-wrap">
@@ -230,9 +215,7 @@ export default function AdminPage() {
               </select>
             </div>
             {(() => {
-              const filtered = reservations
-                .filter(r => !filterClient || r.client_id === filterClient)
-                .sort((a, b) => a.date.localeCompare(b.date))
+              const filtered = reservations.filter(r => !filterClient || r.client_id === filterClient).sort((a, b) => a.date.localeCompare(b.date))
               if (!filtered.length) return <p className="text-slate-400 text-sm text-center py-8">Sin reservas</p>
               return (
                 <div className="space-y-2">
@@ -258,31 +241,23 @@ export default function AdminPage() {
         )}
       </div>
 
-      {/* ── MODAL: New Client ── */}
       {showNewClient && <NewClientModal onClose={() => setShowNewClient(false)} onSave={async (data) => {
         const res = await fetch('/api/clients', { method: 'POST', headers: authHeaders(), body: JSON.stringify(data) })
         const json = await res.json()
         if (!res.ok) { setAlert({ type: 'err', msg: json.error }); return }
         setAlert({ type: 'ok', msg: `Cliente "${json.name}" registrado.` })
-        setShowNewClient(false)
-        loadData()
+        setShowNewClient(false); loadData()
       }} />}
 
-      {/* ── MODAL: New Reservation ── */}
-      {showNewRes !== null && <NewReservationModal
-        clients={clients}
-        defaultDate={showNewRes.date}
-        defaultSlot={showNewRes.slot}
+      {showNewRes !== null && <NewReservationModal clients={clients} defaultDate={showNewRes.date} defaultSlot={showNewRes.slot}
         onClose={() => setShowNewRes(null)}
         onSave={async (data) => {
           const res = await fetch('/api/reservations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
           const json = await res.json()
           if (!res.ok) { setAlert({ type: 'err', msg: json.error }); setShowNewRes(null); return }
           setAlert({ type: 'ok', msg: `Reserva confirmada: ${json.date} · ${SLOTS[json.slot as keyof typeof SLOTS].label}` })
-          setShowNewRes(null)
-          loadData()
-        }}
-      />}
+          setShowNewRes(null); loadData()
+        }} />}
     </div>
   )
 }
@@ -295,12 +270,13 @@ function NewClientModal({ onClose, onSave }: { onClose: () => void; onSave: (d: 
     <Modal title="Registrar nuevo cliente" onClose={onClose}>
       <label className="text-xs text-slate-500">Nombre</label>
       <input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3 mt-1" value={form.name} onChange={e => set('name', e.target.value)} />
-      <label className="text-xs text-slate-500">Teléfono / Email (opcional)</label>
-      <input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3 mt-1" value={form.contact} onChange={e => set('contact', e.target.value)} />
+      <label className="text-xs text-slate-500">Correo electrónico del cliente</label>
+      <input type="email" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-1 mt-1" value={form.contact} onChange={e => set('contact', e.target.value)} placeholder="correo@ejemplo.com" />
+      <p className="text-xs text-slate-400 mb-3">El cliente usará este correo para ingresar al portal.</p>
       <div className="grid grid-cols-2 gap-3 mb-3">
         <div>
           <label className="text-xs text-slate-500">Paquete</label>
-          <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.package} onChange={e => set('package', e.target.value)}>
+          <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" value={form.package} onChange={e => set('package', e.target.value)}>
             <option value="premium">🥇 Premium — 10 bloques</option>
             <option value="basic">🥈 Básico — 6 bloques</option>
             <option value="lite">🥉 Lite — 3 bloques</option>
@@ -311,7 +287,7 @@ function NewClientModal({ onClose, onSave }: { onClose: () => void; onSave: (d: 
           <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.start_date} onChange={e => set('start_date', e.target.value)} />
         </div>
       </div>
-      <label className="text-xs text-slate-500">Precio bloque nocturno extra ($)</label>
+      <label className="text-xs text-slate-500">Precio bloque nocturno ($)</label>
       <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-4" value={form.night_price} onChange={e => set('night_price', parseFloat(e.target.value))} />
       <div className="flex gap-2 justify-end">
         <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg hover:bg-slate-100">Cancelar</button>
@@ -329,7 +305,7 @@ function NewReservationModal({ clients, defaultDate, defaultSlot, onClose, onSav
   return (
     <Modal title="Nueva reserva" onClose={onClose}>
       <label className="text-xs text-slate-500">Cliente</label>
-      <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-3" value={form.client_id} onChange={e => set('client_id', e.target.value)}>
+      <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-3 bg-white" value={form.client_id} onChange={e => set('client_id', e.target.value)}>
         {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
       </select>
       <div className="grid grid-cols-2 gap-3 mb-4">
@@ -339,18 +315,13 @@ function NewReservationModal({ clients, defaultDate, defaultSlot, onClose, onSav
         </div>
         <div>
           <label className="text-xs text-slate-500">Turno</label>
-          <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.slot} onChange={e => set('slot', e.target.value)}>
+          <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" value={form.slot} onChange={e => set('slot', e.target.value)}>
             <option value="morning">☀️ Mañana (7am–12pm)</option>
             <option value="afternoon">🌤️ Tarde (1pm–5pm)</option>
             <option value="night">🌙 Noche extra (6pm–9pm)</option>
           </select>
         </div>
       </div>
-      {form.slot === 'night' && (
-        <p className="text-xs text-amber-600 bg-amber-50 rounded-lg p-2 mb-3">
-          🌙 Este bloque es nocturno extra — se calculará el costo adicional según la tarifa del cliente.
-        </p>
-      )}
       <div className="flex gap-2 justify-end">
         <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg hover:bg-slate-100">Cancelar</button>
         <button onClick={() => onSave(form)} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Confirmar</button>
