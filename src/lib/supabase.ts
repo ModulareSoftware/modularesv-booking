@@ -5,7 +5,6 @@ const supabaseKey  = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 export const supabase = createClient(supabaseUrl, supabaseKey)
 
-// ── Types ──────────────────────────────────────────────────
 export type Package = 'premium' | 'basic' | 'lite'
 export type Slot    = 'morning' | 'afternoon' | 'night'
 
@@ -14,9 +13,10 @@ export interface Client {
   name:        string
   contact:     string | null
   package:     Package
-  start_date:  string   // ISO date string YYYY-MM-DD
+  start_date:  string
   night_price: number
   created_at:  string
+  auth_user_id?: string | null
 }
 
 export interface Reservation {
@@ -28,7 +28,6 @@ export interface Reservation {
   client?:    Client
 }
 
-// ── Package config ─────────────────────────────────────────
 export const PACKAGES: Record<Package, { label: string; blocks: number; price: number }> = {
   premium: { label: 'Premium',  blocks: 10, price: 200 },
   basic:   { label: 'Básico',   blocks: 6,  price: 160 },
@@ -41,7 +40,8 @@ export const SLOTS: Record<Slot, { label: string; time: string; emoji: string }>
   night:     { label: 'Noche extra', time: '6:00pm – 9:00pm',  emoji: '🌙' },
 }
 
-// ── Helpers ────────────────────────────────────────────────
+export const ADMIN_EMAIL = 'admin@modularesv.com'
+
 export function getVigencyEnd(startDate: string): Date {
   const d = new Date(startDate + 'T12:00:00')
   d.setDate(d.getDate() + 30)
@@ -61,9 +61,4 @@ export function fmtDate(d: Date): string {
 export function fmtDisplay(dateStr: string): string {
   const d = new Date(dateStr + 'T12:00:00')
   return d.toLocaleDateString('es-SV', { weekday: 'short', day: 'numeric', month: 'short' })
-}
-
-export function isWeekend(dateStr: string): boolean {
-  const day = new Date(dateStr + 'T12:00:00').getDay()
-  return day === 0 // Sunday only (Saturday is allowed)
 }
