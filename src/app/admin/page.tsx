@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getVigencyEnd, fmtDisplay } from '@/lib/supabase'
 
-const ADMIN_SECRET = process.env.NEXT_PUBLIC_ADMIN_SECRET || 'modularesv2024admin'
+const ADMIN_SECRET = process.env.NEXT_PUBLIC_ADMIN_SECRET || 'Modulare BR2024admin'
 const DAYS_ES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 
 function authHeaders() {
@@ -85,7 +85,7 @@ export default function AdminPage() {
       {/* Nav */}
       <nav className="bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3 flex-wrap">
         <a href="/" className="font-semibold text-slate-800 mr-auto" style={{ fontFamily: 'Fraunces, serif' }}>
-          ModularESV
+          Modulare BR
         </a>
         <span className="text-xs text-slate-400 bg-blue-50 text-blue-600 px-2 py-1 rounded-full">Admin</span>
         {(['calendar', 'clients', 'reservations'] as const).map(t => (
