@@ -5,7 +5,7 @@ export default function Home() {
     <main className="min-h-screen flex flex-col items-center justify-center bg-slate-50 px-4">
       <div className="text-center mb-12">
         <h1 className="text-4xl font-semibold mb-2" style={{ fontFamily: 'Fraunces, serif' }}>
-          ModularESV
+          Modulare BR
         </h1>
         <p className="text-slate-500 text-lg">Sistema de reservas de espacios flexibles</p>
       </div>
