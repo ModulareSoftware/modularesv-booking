@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getVigencyEnd, fmtDisplay } from '@/lib/supabase'
 
-const ADMIN_SECRET = process.env.NEXT_PUBLIC_ADMIN_SECRET || 'Modulare BR2024admin'
+const ADMIN_SECRET = 'Modular2024!'
 const DAYS_ES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 
 function authHeaders() {
