@@ -9,14 +9,15 @@ export type Package = 'premium' | 'basic' | 'lite'
 export type Slot    = 'morning' | 'afternoon' | 'night'
 
 export interface Client {
-  id:           string
-  name:         string
-  contact:      string | null
-  package:      Package
-  start_date:   string
-  night_price:  number
-  sunday_price: number
-  created_at:   string
+  id:            string
+  name:          string
+  company_name:  string | null
+  contact:       string | null
+  package:       Package
+  start_date:    string
+  night_price:   number
+  sunday_price:  number
+  created_at:    string
   auth_user_id?: string | null
 }
 
@@ -74,4 +75,8 @@ export function isExtraCharge(dateStr: string, slot: string): boolean {
 
 export function countsAgainstQuota(dateStr: string, slot: string): boolean {
   return !isSunday(dateStr) && slot !== 'night'
+}
+
+export function displayName(client: Client): string {
+  return client.company_name || client.name
 }
