@@ -9,13 +9,14 @@ export type Package = 'premium' | 'basic' | 'lite'
 export type Slot    = 'morning' | 'afternoon' | 'night'
 
 export interface Client {
-  id:          string
-  name:        string
-  contact:     string | null
-  package:     Package
-  start_date:  string
-  night_price: number
-  created_at:  string
+  id:           string
+  name:         string
+  contact:      string | null
+  package:      Package
+  start_date:   string
+  night_price:  number
+  sunday_price: number
+  created_at:   string
   auth_user_id?: string | null
 }
 
@@ -49,8 +50,8 @@ export function getVigencyEnd(startDate: string): Date {
 }
 
 export function daysLeft(startDate: string): number {
-  const end  = getVigencyEnd(startDate)
-  const now  = new Date()
+  const end = getVigencyEnd(startDate)
+  const now = new Date()
   return Math.max(0, Math.ceil((end.getTime() - now.getTime()) / 86400000))
 }
 
@@ -61,4 +62,16 @@ export function fmtDate(d: Date): string {
 export function fmtDisplay(dateStr: string): string {
   const d = new Date(dateStr + 'T12:00:00')
   return d.toLocaleDateString('es-SV', { weekday: 'short', day: 'numeric', month: 'short' })
+}
+
+export function isSunday(dateStr: string): boolean {
+  return new Date(dateStr + 'T12:00:00').getDay() === 0
+}
+
+export function isExtraCharge(dateStr: string, slot: string): boolean {
+  return slot === 'night' || isSunday(dateStr)
+}
+
+export function countsAgainstQuota(dateStr: string, slot: string): boolean {
+  return !isSunday(dateStr) && slot !== 'night'
 }
