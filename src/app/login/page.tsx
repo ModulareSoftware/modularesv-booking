@@ -29,7 +29,7 @@ function LoginForm() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-semibold text-slate-800 mb-1" style={{ fontFamily: 'Fraunces, serif' }}>
-            Modulare BR
+            Modulare Flex Office
           </h1>
           <p className="text-slate-400 text-sm">Sistema de reservas de espacios flexibles</p>
         </div>
