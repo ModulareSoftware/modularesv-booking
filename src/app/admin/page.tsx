@@ -5,7 +5,7 @@ import { supabase, Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getV
 
 const ADMIN_SECRET = 'Modular2024!'
 const DAYS_ES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
-const DAYS_ES_SHORT = ['L', 'M', 'X', 'J', 'V', 'S']
+const DAYS_ES_SHORT = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 const MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
 function authHeaders() {
@@ -48,7 +48,6 @@ export default function AdminPage() {
 
   useEffect(() => { loadData() }, [loadData])
 
-  // ── Week helpers ──
   function getWeekDays() {
     const today = new Date()
     const dow = today.getDay() === 0 ? 6 : today.getDay() - 1
@@ -59,13 +58,12 @@ export default function AdminPage() {
     })
   }
 
-  // ── Month helpers ──
   function getMonthDays() {
     const today = new Date()
     const year = today.getFullYear()
     const month = today.getMonth() + monthOffset
     const ref = new Date(year, month, 1)
-    const firstDay = ref.getDay() === 0 ? 6 : ref.getDay() - 1
+    const firstDay = ref.getDay()
     const daysInMonth = new Date(ref.getFullYear(), ref.getMonth() + 1, 0).getDate()
     return { ref, firstDay, daysInMonth }
   }
@@ -140,7 +138,6 @@ export default function AdminPage() {
       <div className="p-4 max-w-6xl mx-auto">
         {tab === 'calendar' && (
           <div className="bg-white rounded-2xl border border-slate-200 p-4">
-            {/* Calendar header */}
             <div className="flex items-center gap-2 mb-4 flex-wrap">
               <h2 className="font-semibold text-slate-700 mr-auto">
                 {calView === 'week'
@@ -148,8 +145,6 @@ export default function AdminPage() {
                   : `${MONTHS_ES[monthRef.getMonth()]} ${monthRef.getFullYear()}`
                 }
               </h2>
-
-              {/* View toggle */}
               <div className="flex bg-slate-100 rounded-lg p-0.5 gap-0.5">
                 <button onClick={() => setCalView('week')}
                   className={`text-xs px-3 py-1.5 rounded-md transition-all ${calView === 'week' ? 'bg-white shadow-sm font-medium' : 'text-slate-500'}`}>
@@ -160,7 +155,6 @@ export default function AdminPage() {
                   Mes
                 </button>
               </div>
-
               {calView === 'week' ? (
                 <>
                   <button onClick={() => setWeekOffset(w => w - 1)} className="p-1.5 rounded-lg hover:bg-slate-100">‹</button>
@@ -174,11 +168,9 @@ export default function AdminPage() {
                   <button onClick={() => setMonthOffset(m => m + 1)} className="p-1.5 rounded-lg hover:bg-slate-100">›</button>
                 </>
               )}
-
               <button onClick={() => setShowNewRes({})} className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700">+ Reserva</button>
             </div>
 
-            {/* ── WEEK VIEW ── */}
             {calView === 'week' && (
               <>
                 <div className="grid gap-1" style={{ gridTemplateColumns: '72px repeat(6, 1fr)' }}>
@@ -218,27 +210,23 @@ export default function AdminPage() {
               </>
             )}
 
-            {/* ── MONTH VIEW ── */}
             {calView === 'month' && (
               <>
-                <div className="grid grid-cols-6 gap-1 mb-1">
+                <div className="grid grid-cols-7 gap-1 mb-1">
                   {DAYS_ES_SHORT.map(d => (
                     <div key={d} className="text-center text-xs font-medium text-slate-400 py-1">{d}</div>
                   ))}
                 </div>
-                <div className="grid grid-cols-6 gap-1">
-                  {/* Empty cells before first day */}
+                <div className="grid grid-cols-7 gap-1">
                   {Array.from({ length: firstDay }).map((_, i) => (
                     <div key={'empty-' + i} />
                   ))}
-                  {/* Day cells */}
                   {Array.from({ length: daysInMonth }).map((_, i) => {
                     const day = i + 1
                     const dateStr = `${monthRef.getFullYear()}-${String(monthRef.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
                     const dayRes = getResForDay(dateStr)
                     const isToday = dateStr === todayStr
                     const isSunday = new Date(dateStr + 'T12:00:00').getDay() === 0
-
                     return (
                       <div key={dateStr}
                         onClick={() => !isSunday && setShowNewRes({ date: dateStr })}
