@@ -29,7 +29,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Faltan campos requeridos' }, { status: 400 })
   }
 
-  // Fetch client
   const { data: client, error: cErr } = await supabase
     .from('clients')
     .select('*')
@@ -43,30 +42,34 @@ export async function POST(req: NextRequest) {
   const end   = getVigencyEnd(client.start_date)
   const d     = new Date(date + 'T12:00:00')
   if (d < start || d > end) {
-    return NextResponse.json({ error: `Fecha fuera del período de vigencia (${client.start_date} – ${end.toISOString().slice(0, 10)})` }, { status: 400 })
+    return NextResponse.json({
+      error: `Fecha fuera del período de vigencia (${client.start_date} – ${end.toISOString().slice(0, 10)})`
+    }, { status: 400 })
   }
 
-  // Check sunday
-  if (d.getDay() === 0) {
-    return NextResponse.json({ error: 'No se puede reservar los domingos' }, { status: 400 })
-  }
+  const isSunday = d.getDay() === 0
 
-  // Check block quota (night doesn't count against package blocks)
-  if (slot !== 'night') {
-    const { count } = await supabase
+  // Only count against quota if not sunday and not night
+  if (!isSunday && slot !== 'night') {
+    const { data: allRes } = await supabase
       .from('reservations')
-      .select('*', { count: 'exact', head: true })
+      .select('date, slot')
       .eq('client_id', client_id)
       .neq('slot', 'night')
 
-    const used  = count ?? 0
+    const usedQuota = (allRes || []).filter(r => {
+      return new Date(r.date + 'T12:00:00').getDay() !== 0
+    }).length
+
     const total = PACKAGES[client.package as keyof typeof PACKAGES].blocks
-    if (used >= total) {
-      return NextResponse.json({ error: `Sin bloques disponibles (${used}/${total} usados)` }, { status: 400 })
+    if (usedQuota >= total) {
+      return NextResponse.json({
+        error: `Sin bloques disponibles (${usedQuota}/${total} usados)`
+      }, { status: 400 })
     }
   }
 
-  // Insert — unique(date, slot) constraint handles conflicts automatically
+  // Insert — unique(date, slot) handles conflicts
   const { data, error } = await supabase
     .from('reservations')
     .insert({ client_id, date, slot })
