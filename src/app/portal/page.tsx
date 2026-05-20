@@ -100,7 +100,7 @@ export default function PortalPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <nav className="bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3">
-        <span className="font-semibold text-slate-800" style={{ fontFamily: 'Fraunces, serif' }}>Modulare BR</span>
+        <span className="font-semibold text-slate-800" style={{ fontFamily: 'Fraunces, serif' }}>Modulare Flex Office</span>
         <span className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded-full ml-auto">Portal de clientes</span>
         <button onClick={logout} className="text-xs text-slate-400 hover:text-slate-600">Salir</button>
       </nav>
