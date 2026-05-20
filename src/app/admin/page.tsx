@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase, Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getVigencyEnd, fmtDisplay, ADMIN_EMAIL, isSunday, countsAgainstQuota } from '@/lib/supabase'
+import { supabase, Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getVigencyEnd, fmtDisplay, ADMIN_EMAIL, isSunday, countsAgainstQuota, displayName } from '@/lib/supabase'
 
 const ADMIN_SECRET = 'Modular2024!'
 const DAYS_ES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
@@ -22,6 +22,7 @@ export default function AdminPage() {
   const [monthOffset, setMonthOffset] = useState(0)
   const [loading, setLoading] = useState(true)
   const [showNewClient, setShowNewClient] = useState(false)
+  const [editingClient, setEditingClient] = useState<Client | null>(null)
   const [showNewRes, setShowNewRes] = useState<{ date?: string; slot?: string } | null>(null)
   const [filterClient, setFilterClient] = useState('')
   const [alert, setAlert] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null)
@@ -201,9 +202,9 @@ export default function AdminPage() {
                             onClick={() => res ? deleteReservation(res.id) : setShowNewRes({ date: dateStr, slot })}
                             className={`min-h-12 rounded-xl border cursor-pointer transition-all flex flex-col items-center justify-center text-center p-1
                               ${res ? slotColors[slot] : isDom ? 'border-purple-100 bg-purple-50 hover:border-purple-300' : 'border-slate-100 bg-slate-50 hover:border-blue-300 hover:bg-blue-50'}`}
-                            title={res ? `${client?.name} — clic para cancelar` : isDom ? 'Domingo (extra)' : 'Clic para reservar'}>
+                            title={res ? `${client ? displayName(client) : ''} — clic para cancelar` : isDom ? 'Domingo (extra)' : 'Clic para reservar'}>
                             {client
-                              ? <span className="text-xs font-medium leading-tight">{client.name.split(' ')[0]}</span>
+                              ? <span className="text-xs font-medium leading-tight">{displayName(client).split(' ')[0]}</span>
                               : <span className={`text-lg ${isDom ? 'text-purple-200' : 'text-slate-200'}`}>+</span>
                             }
                           </div>
@@ -251,9 +252,9 @@ export default function AdminPage() {
                                 onClick={e => { e.stopPropagation(); deleteReservation(r.id) }}
                                 className={`flex items-center gap-1 px-1 py-0.5 rounded text-xs cursor-pointer hover:opacity-75
                                   ${r.slot === 'morning' ? 'bg-blue-100 text-blue-700' : r.slot === 'afternoon' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}
-                                title={`${c?.name} · ${SLOTS[r.slot as keyof typeof SLOTS].label} — clic para cancelar`}>
+                                title={`${c ? displayName(c) : ''} · ${SLOTS[r.slot as keyof typeof SLOTS].label} — clic para cancelar`}>
                                 <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${slotDots[r.slot]}`} />
-                                <span className="truncate">{c?.name.split(' ')[0]}</span>
+                                <span className="truncate">{c ? displayName(c).split(' ')[0] : ''}</span>
                               </div>
                             )
                           })}
@@ -290,11 +291,12 @@ export default function AdminPage() {
                 return (
                   <div key={c.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:border-slate-200">
                     <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-semibold flex-shrink-0">
-                      {c.name.split(' ').map((x: string) => x[0]).slice(0, 2).join('')}
+                      {displayName(c).split(' ').map((x: string) => x[0]).slice(0, 2).join('')}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-sm">{c.name}</span>
+                        <span className="font-medium text-sm">{displayName(c)}</span>
+                        {c.company_name && <span className="text-xs text-slate-400">({c.name})</span>}
                         <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">{pkg.label}</span>
                         {dl <= 5 && <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">⚠️ {dl}d restantes</span>}
                       </div>
@@ -307,11 +309,14 @@ export default function AdminPage() {
                         <div className={`h-full rounded-full ${pct >= 100 ? 'bg-red-400' : pct >= 75 ? 'bg-amber-400' : 'bg-blue-400'}`} style={{ width: `${pct}%` }} />
                       </div>
                     </div>
-                    <div className="text-right flex-shrink-0">
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
                       <span className={`text-xs font-semibold px-2 py-1 rounded-lg ${remaining === 0 ? 'bg-red-50 text-red-600' : remaining <= 1 ? 'bg-amber-50 text-amber-600' : 'bg-green-50 text-green-600'}`}>
                         {remaining} disp.
                       </span>
-                      <button onClick={() => deleteClient(c.id)} className="block mt-1 text-xs text-slate-300 hover:text-red-400 ml-auto">eliminar</button>
+                      <div className="flex gap-2">
+                        <button onClick={() => setEditingClient(c)} className="text-xs text-blue-400 hover:text-blue-600">editar</button>
+                        <button onClick={() => deleteClient(c.id)} className="text-xs text-slate-300 hover:text-red-400">eliminar</button>
+                      </div>
                     </div>
                   </div>
                 )
@@ -327,7 +332,7 @@ export default function AdminPage() {
               <select value={filterClient} onChange={e => setFilterClient(e.target.value)}
                 className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
                 <option value="">Todos los clientes</option>
-                {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {clients.map(c => <option key={c.id} value={c.id}>{displayName(c)}</option>)}
               </select>
             </div>
             {(() => {
@@ -343,7 +348,7 @@ export default function AdminPage() {
                       <div key={r.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50">
                         <span className={`w-2 h-2 rounded-full flex-shrink-0 ${r.slot === 'morning' ? 'bg-blue-400' : r.slot === 'afternoon' ? 'bg-green-400' : 'bg-amber-400'}`} />
                         <div className="flex-1 text-sm">
-                          <span className="font-medium">{c?.name}</span>
+                          <span className="font-medium">{c ? displayName(c) : '?'}</span>
                           <span className="text-slate-400"> · {new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })} · {slot.label}</span>
                           {isDom && <span className="ml-1 text-xs text-purple-600">🗓️ dom +${c?.sunday_price || 25}</span>}
                           {r.slot === 'night' && !isDom && <span className="ml-2 text-xs bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">+${c?.night_price}/noche</span>}
@@ -363,8 +368,16 @@ export default function AdminPage() {
         const res = await fetch('/api/clients/create', { method: 'POST', headers: authHeaders(), body: JSON.stringify(data) })
         const json = await res.json()
         if (!res.ok) { setAlert({ type: 'err', msg: json.error }); return }
-        setAlert({ type: 'ok', msg: `✅ Cliente "${json.name}" registrado. Ya puede ingresar al portal.` })
+        setAlert({ type: 'ok', msg: `✅ Cliente "${displayName(json)}" registrado. Ya puede ingresar al portal.` })
         setShowNewClient(false); loadData()
+      }} />}
+
+      {editingClient && <EditClientModal client={editingClient} onClose={() => setEditingClient(null)} onSave={async (data) => {
+        const res = await fetch('/api/clients/create', { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ id: editingClient.id, ...data }) })
+        const json = await res.json()
+        if (!res.ok) { setAlert({ type: 'err', msg: json.error }); return }
+        setAlert({ type: 'ok', msg: `✅ Cliente "${displayName(json)}" actualizado.` })
+        setEditingClient(null); loadData()
       }} />}
 
       {showNewRes !== null && <NewReservationModal clients={clients} defaultDate={showNewRes.date} defaultSlot={showNewRes.slot}
@@ -382,28 +395,28 @@ export default function AdminPage() {
 
 function NewClientModal({ onClose, onSave }: { onClose: () => void; onSave: (d: object) => void }) {
   const today = fmtDate(new Date())
-  const [form, setForm] = useState({ name: '', contact: '', password: '', package: 'basic', start_date: today, night_price: 25, sunday_price: 25 })
+  const [form, setForm] = useState({ name: '', company_name: '', contact: '', password: '', package: 'basic', start_date: today, night_price: 25, sunday_price: 25 })
   const set = (k: string, v: string | number) => setForm(f => ({ ...f, [k]: v }))
   const [copied, setCopied] = useState(false)
 
   function generatePassword() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
     const pwd = Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
-    set('password', pwd)
-    setCopied(false)
+    set('password', pwd); setCopied(false)
   }
 
   function copyPassword() {
     navigator.clipboard.writeText(form.password)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    setCopied(true); setTimeout(() => setCopied(false), 2000)
   }
 
   return (
     <Modal title="Registrar nuevo cliente" onClose={onClose}>
-      <label className="text-xs text-slate-500">Nombre</label>
-      <input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3 mt-1" value={form.name} onChange={e => set('name', e.target.value)} />
-      <label className="text-xs text-slate-500">Correo electrónico del cliente</label>
+      <label className="text-xs text-slate-500">Nombre de contacto</label>
+      <input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3 mt-1" value={form.name} onChange={e => set('name', e.target.value)} placeholder="Ej. Pepito Reyes" />
+      <label className="text-xs text-slate-500">Nombre fiscal / empresa <span className="text-slate-300">(opcional)</span></label>
+      <input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3 mt-1" value={form.company_name} onChange={e => set('company_name', e.target.value)} placeholder="Ej. Pepitos Asociados S.A. de C.V." />
+      <label className="text-xs text-slate-500">Correo electrónico</label>
       <input type="email" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3 mt-1" value={form.contact} onChange={e => set('contact', e.target.value)} placeholder="correo@ejemplo.com" />
       <label className="text-xs text-slate-500">Contraseña de acceso al portal</label>
       <div className="flex gap-2 mt-1 mb-1">
@@ -411,7 +424,7 @@ function NewClientModal({ onClose, onSave }: { onClose: () => void; onSave: (d: 
         <button onClick={generatePassword} className="px-3 py-2 text-xs border border-slate-200 rounded-lg hover:bg-slate-50">Generar</button>
         {form.password && <button onClick={copyPassword} className={`px-3 py-2 text-xs rounded-lg border ${copied ? 'bg-green-50 text-green-600 border-green-200' : 'border-slate-200 hover:bg-slate-50'}`}>{copied ? '✓ Copiado' : 'Copiar'}</button>}
       </div>
-      <p className="text-xs text-slate-400 mb-3">Comparte este correo y contraseña con el cliente para que ingrese al portal.</p>
+      <p className="text-xs text-slate-400 mb-3">Comparte este correo y contraseña con el cliente.</p>
       <div className="grid grid-cols-2 gap-3 mb-3">
         <div>
           <label className="text-xs text-slate-500">Paquete</label>
@@ -444,6 +457,92 @@ function NewClientModal({ onClose, onSave }: { onClose: () => void; onSave: (d: 
   )
 }
 
+function EditClientModal({ client, onClose, onSave }: { client: Client; onClose: () => void; onSave: (d: object) => void }) {
+  const [form, setForm] = useState({
+    name: client.name,
+    company_name: client.company_name || '',
+    contact: client.contact || '',
+    password: '',
+    package: client.package,
+    start_date: client.start_date,
+    night_price: client.night_price,
+    sunday_price: client.sunday_price || 25,
+  })
+  const set = (k: string, v: string | number) => setForm(f => ({ ...f, [k]: v }))
+  const [showPwd, setShowPwd] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  function generatePassword() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
+    const pwd = Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+    set('password', pwd); setCopied(false)
+  }
+
+  function copyPassword() {
+    navigator.clipboard.writeText(form.password)
+    setCopied(true); setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <Modal title={`Editar — ${displayName(client)}`} onClose={onClose}>
+      <label className="text-xs text-slate-500">Nombre de contacto</label>
+      <input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3 mt-1" value={form.name} onChange={e => set('name', e.target.value)} />
+      <label className="text-xs text-slate-500">Nombre fiscal / empresa <span className="text-slate-300">(opcional)</span></label>
+      <input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3 mt-1" value={form.company_name} onChange={e => set('company_name', e.target.value)} placeholder="Ej. Pepitos Asociados S.A. de C.V." />
+      <label className="text-xs text-slate-500">Correo electrónico</label>
+      <input type="email" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3 mt-1" value={form.contact} onChange={e => set('contact', e.target.value)} />
+      <label className="text-xs text-slate-500">Nueva contraseña <span className="text-slate-300">(dejar vacío para no cambiar)</span></label>
+      <div className="flex gap-2 mt-1 mb-1">
+        <div className="relative flex-1">
+          <input type={showPwd ? 'text' : 'password'} className="w-full border border-slate-200 rounded-lg px-3 py-2 pr-8 text-sm font-mono" value={form.password} onChange={e => set('password', e.target.value)} placeholder="••••••••" />
+          <button type="button" onClick={() => setShowPwd(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+            {showPwd ? (
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>
+              </svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+              </svg>
+            )}
+          </button>
+        </div>
+        <button onClick={generatePassword} className="px-3 py-2 text-xs border border-slate-200 rounded-lg hover:bg-slate-50">Generar</button>
+        {form.password && <button onClick={copyPassword} className={`px-3 py-2 text-xs rounded-lg border ${copied ? 'bg-green-50 text-green-600 border-green-200' : 'border-slate-200 hover:bg-slate-50'}`}>{copied ? '✓ Copiado' : 'Copiar'}</button>}
+      </div>
+      <p className="text-xs text-slate-400 mb-3">Si generas una nueva contraseña, compártela con el cliente.</p>
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label className="text-xs text-slate-500">Paquete</label>
+          <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" value={form.package} onChange={e => set('package', e.target.value)}>
+            <option value="premium">🥇 Premium — 10 bloques</option>
+            <option value="basic">🥈 Básico — 6 bloques</option>
+            <option value="lite">🥉 Lite — 3 bloques</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-slate-500">Inicio vigencia</label>
+          <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.start_date} onChange={e => set('start_date', e.target.value)} />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div>
+          <label className="text-xs text-slate-500">Precio noche extra ($)</label>
+          <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.night_price} onChange={e => set('night_price', parseFloat(e.target.value))} />
+        </div>
+        <div>
+          <label className="text-xs text-slate-500">Precio domingo ($)</label>
+          <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.sunday_price} onChange={e => set('sunday_price', parseFloat(e.target.value))} />
+        </div>
+      </div>
+      <div className="flex gap-2 justify-end">
+        <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg hover:bg-slate-100">Cancelar</button>
+        <button onClick={() => onSave(form)} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Guardar cambios</button>
+      </div>
+    </Modal>
+  )
+}
+
 function NewReservationModal({ clients, defaultDate, defaultSlot, onClose, onSave }:
   { clients: Client[]; defaultDate?: string; defaultSlot?: string; onClose: () => void; onSave: (d: object) => void }) {
   const today = fmtDate(new Date())
@@ -454,7 +553,7 @@ function NewReservationModal({ clients, defaultDate, defaultSlot, onClose, onSav
     <Modal title="Nueva reserva" onClose={onClose}>
       <label className="text-xs text-slate-500">Cliente</label>
       <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-3 bg-white" value={form.client_id} onChange={e => set('client_id', e.target.value)}>
-        {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        {clients.map(c => <option key={c.id} value={c.id}>{displayName(c)}</option>)}
       </select>
       <div className="grid grid-cols-2 gap-3 mb-3">
         <div>
@@ -489,7 +588,7 @@ function NewReservationModal({ clients, defaultDate, defaultSlot, onClose, onSav
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="bg-white rounded-2xl p-5 w-full max-w-md border border-slate-200">
+      <div className="bg-white rounded-2xl p-5 w-full max-w-md border border-slate-200 max-h-screen overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-slate-800">{title}</h3>
           <button onClick={onClose} className="text-slate-300 hover:text-slate-500 text-xl">✕</button>
