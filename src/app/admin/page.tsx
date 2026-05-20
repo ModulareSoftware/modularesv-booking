@@ -93,7 +93,7 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <nav className="bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3 flex-wrap">
-        <span className="font-semibold text-slate-800 mr-auto" style={{ fontFamily: 'Fraunces, serif' }}>Modulare BR</span>
+        <span className="font-semibold text-slate-800 mr-auto" style={{ fontFamily: 'Fraunces, serif' }}>Modulare Flex Office</span>
         <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full">Admin</span>
         {(['calendar', 'clients', 'reservations'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
