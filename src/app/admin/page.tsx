@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase, Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getVigencyEnd, fmtDisplay, ADMIN_EMAIL } from '@/lib/supabase'
+import { supabase, Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getVigencyEnd, fmtDisplay, ADMIN_EMAIL, isSunday, countsAgainstQuota } from '@/lib/supabase'
 
 const ADMIN_SECRET = 'Modular2024!'
 const DAYS_ES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
@@ -53,7 +53,7 @@ export default function AdminPage() {
     const dow = today.getDay() === 0 ? 6 : today.getDay() - 1
     const monday = new Date(today)
     monday.setDate(today.getDate() - dow + weekOffset * 7)
-    return Array.from({ length: 6 }, (_, i) => {
+    return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(monday); d.setDate(monday.getDate() + i); return d
     })
   }
@@ -80,10 +80,12 @@ export default function AdminPage() {
   }
 
   function getClientUsage(c: Client) {
-    const used = reservations.filter(r => r.client_id === c.id && r.slot !== 'night').length
-    const nights = reservations.filter(r => r.client_id === c.id && r.slot === 'night').length
+    const clientRes = reservations.filter(r => r.client_id === c.id)
+    const used = clientRes.filter(r => countsAgainstQuota(r.date, r.slot)).length
+    const nights = clientRes.filter(r => r.slot === 'night' && !isSunday(r.date)).length
+    const sundays = clientRes.filter(r => isSunday(r.date)).length
     const total = PACKAGES[c.package].blocks
-    return { used, nights, total, remaining: total - used }
+    return { used, nights, sundays, total, remaining: total - used }
   }
 
   async function deleteReservation(id: string) {
@@ -141,7 +143,7 @@ export default function AdminPage() {
             <div className="flex items-center gap-2 mb-4 flex-wrap">
               <h2 className="font-semibold text-slate-700 mr-auto">
                 {calView === 'week'
-                  ? `${weekDays[0].toLocaleDateString('es-SV', { day: 'numeric', month: 'short' })} – ${weekDays[5].toLocaleDateString('es-SV', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                  ? `${weekDays[0].toLocaleDateString('es-SV', { day: 'numeric', month: 'short' })} – ${weekDays[6].toLocaleDateString('es-SV', { day: 'numeric', month: 'short', year: 'numeric' })}`
                   : `${MONTHS_ES[monthRef.getMonth()]} ${monthRef.getFullYear()}`
                 }
               </h2>
@@ -173,28 +175,37 @@ export default function AdminPage() {
 
             {calView === 'week' && (
               <>
-                <div className="grid gap-1" style={{ gridTemplateColumns: '72px repeat(6, 1fr)' }}>
+                <div className="grid gap-1" style={{ gridTemplateColumns: '64px repeat(7, 1fr)' }}>
                   <div />
-                  {weekDays.map(d => (
-                    <div key={d.toISOString()} className={`text-center text-xs font-medium py-1 rounded-lg ${fmtDate(d) === todayStr ? 'bg-blue-50 text-blue-600' : 'text-slate-400'}`}>
-                      {DAYS_ES[d.getDay()]}<br /><span className="font-semibold text-sm">{d.getDate()}</span>
-                    </div>
-                  ))}
+                  {weekDays.map(d => {
+                    const isDom = d.getDay() === 0
+                    return (
+                      <div key={d.toISOString()} className={`text-center text-xs font-medium py-1 rounded-lg ${fmtDate(d) === todayStr ? 'bg-blue-50 text-blue-600' : isDom ? 'bg-purple-50 text-purple-500' : 'text-slate-400'}`}>
+                        {DAYS_ES[d.getDay()]}<br /><span className="font-semibold text-sm">{d.getDate()}</span>
+                      </div>
+                    )
+                  })}
                   {(['morning', 'afternoon', 'night'] as const).map(slot => (
                     <>
-                      <div key={slot + '-label'} className="flex items-center justify-end pr-2 text-xs text-slate-400">
-                        {SLOTS[slot].emoji}<br />{slot === 'morning' ? '7–12' : slot === 'afternoon' ? '1–5' : '6–9'}
+                      <div key={slot + '-label'} className="flex flex-col items-end justify-center pr-2 text-xs text-slate-400">
+                        <span>{SLOTS[slot].emoji}</span>
+                        <span>{slot === 'morning' ? '7–12' : slot === 'afternoon' ? '1–5' : '6–9'}</span>
                       </div>
                       {weekDays.map(d => {
                         const dateStr = fmtDate(d)
                         const res = getRes(dateStr, slot)
                         const client = res ? clients.find(c => c.id === res.client_id) : null
+                        const isDom = d.getDay() === 0
                         return (
                           <div key={dateStr + slot}
                             onClick={() => res ? deleteReservation(res.id) : setShowNewRes({ date: dateStr, slot })}
-                            className={`min-h-14 rounded-xl border cursor-pointer transition-all flex flex-col items-center justify-center text-center p-1 ${res ? slotColors[slot] : 'border-slate-100 bg-slate-50 hover:border-blue-300 hover:bg-blue-50'}`}
-                            title={res ? `${client?.name} — clic para cancelar` : 'Clic para reservar'}>
-                            {client ? <span className="text-xs font-medium leading-tight">{client.name.split(' ')[0]}</span> : <span className="text-slate-200 text-lg">+</span>}
+                            className={`min-h-12 rounded-xl border cursor-pointer transition-all flex flex-col items-center justify-center text-center p-1
+                              ${res ? slotColors[slot] : isDom ? 'border-purple-100 bg-purple-50 hover:border-purple-300' : 'border-slate-100 bg-slate-50 hover:border-blue-300 hover:bg-blue-50'}`}
+                            title={res ? `${client?.name} — clic para cancelar` : isDom ? 'Domingo (extra)' : 'Clic para reservar'}>
+                            {client
+                              ? <span className="text-xs font-medium leading-tight">{client.name.split(' ')[0]}</span>
+                              : <span className={`text-lg ${isDom ? 'text-purple-200' : 'text-slate-200'}`}>+</span>
+                            }
                           </div>
                         )
                       })}
@@ -205,7 +216,8 @@ export default function AdminPage() {
                   <span><span className="inline-block w-3 h-3 rounded bg-blue-200 mr-1" />Mañana</span>
                   <span><span className="inline-block w-3 h-3 rounded bg-green-200 mr-1" />Tarde</span>
                   <span><span className="inline-block w-3 h-3 rounded bg-amber-200 mr-1" />Noche extra</span>
-                  <span className="ml-auto">Clic en celda ocupada = cancelar reserva</span>
+                  <span><span className="inline-block w-3 h-3 rounded bg-purple-100 mr-1" />Domingo</span>
+                  <span className="ml-auto">Clic en celda ocupada = cancelar</span>
                 </div>
               </>
             )}
@@ -213,32 +225,32 @@ export default function AdminPage() {
             {calView === 'month' && (
               <>
                 <div className="grid grid-cols-7 gap-1 mb-1">
-                  {DAYS_ES_SHORT.map(d => (
-                    <div key={d} className="text-center text-xs font-medium text-slate-400 py-1">{d}</div>
+                  {DAYS_ES_SHORT.map((d, i) => (
+                    <div key={d} className={`text-center text-xs font-medium py-1 ${i === 0 ? 'text-purple-400' : 'text-slate-400'}`}>{d}</div>
                   ))}
                 </div>
                 <div className="grid grid-cols-7 gap-1">
-                  {Array.from({ length: firstDay }).map((_, i) => (
-                    <div key={'empty-' + i} />
-                  ))}
+                  {Array.from({ length: firstDay }).map((_, i) => <div key={'empty-' + i} />)}
                   {Array.from({ length: daysInMonth }).map((_, i) => {
                     const day = i + 1
                     const dateStr = `${monthRef.getFullYear()}-${String(monthRef.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
                     const dayRes = getResForDay(dateStr)
                     const isToday = dateStr === todayStr
-                    const isSunday = new Date(dateStr + 'T12:00:00').getDay() === 0
+                    const isDom = new Date(dateStr + 'T12:00:00').getDay() === 0
                     return (
                       <div key={dateStr}
-                        onClick={() => !isSunday && setShowNewRes({ date: dateStr })}
-                        className={`min-h-16 rounded-xl border p-1.5 transition-all ${isToday ? 'border-blue-300 bg-blue-50' : isSunday ? 'border-slate-100 bg-slate-50 opacity-40' : 'border-slate-100 hover:border-slate-300 cursor-pointer'}`}>
-                        <div className={`text-xs font-semibold mb-1 ${isToday ? 'text-blue-600' : 'text-slate-500'}`}>{day}</div>
+                        onClick={() => setShowNewRes({ date: dateStr })}
+                        className={`min-h-16 rounded-xl border p-1.5 transition-all cursor-pointer
+                          ${isToday ? 'border-blue-300 bg-blue-50' : isDom ? 'border-purple-100 bg-purple-50 hover:border-purple-300' : 'border-slate-100 hover:border-slate-300'}`}>
+                        <div className={`text-xs font-semibold mb-1 ${isToday ? 'text-blue-600' : isDom ? 'text-purple-500' : 'text-slate-500'}`}>{day}</div>
                         <div className="flex flex-col gap-0.5">
                           {dayRes.map(r => {
                             const c = clients.find(x => x.id === r.client_id)
                             return (
                               <div key={r.id}
                                 onClick={e => { e.stopPropagation(); deleteReservation(r.id) }}
-                                className={`flex items-center gap-1 px-1 py-0.5 rounded text-xs cursor-pointer hover:opacity-75 ${r.slot === 'morning' ? 'bg-blue-100 text-blue-700' : r.slot === 'afternoon' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}
+                                className={`flex items-center gap-1 px-1 py-0.5 rounded text-xs cursor-pointer hover:opacity-75
+                                  ${r.slot === 'morning' ? 'bg-blue-100 text-blue-700' : r.slot === 'afternoon' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}
                                 title={`${c?.name} · ${SLOTS[r.slot as keyof typeof SLOTS].label} — clic para cancelar`}>
                                 <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${slotDots[r.slot]}`} />
                                 <span className="truncate">{c?.name.split(' ')[0]}</span>
@@ -254,6 +266,7 @@ export default function AdminPage() {
                   <span><span className="inline-block w-3 h-3 rounded bg-blue-200 mr-1" />Mañana</span>
                   <span><span className="inline-block w-3 h-3 rounded bg-green-200 mr-1" />Tarde</span>
                   <span><span className="inline-block w-3 h-3 rounded bg-amber-200 mr-1" />Noche extra</span>
+                  <span><span className="inline-block w-3 h-3 rounded bg-purple-100 mr-1" />Domingo</span>
                   <span className="ml-auto">Clic en día = nueva reserva · Clic en bloque = cancelar</span>
                 </div>
               </>
@@ -267,11 +280,12 @@ export default function AdminPage() {
             {clients.length === 0 && <p className="text-slate-400 text-sm text-center py-8">Sin clientes. Agrega uno con "+ Cliente"</p>}
             <div className="space-y-3">
               {clients.map(c => {
-                const { used, nights, total, remaining } = getClientUsage(c)
+                const { used, nights, sundays, total, remaining } = getClientUsage(c)
                 const pct = Math.round((used / total) * 100)
                 const dl = daysLeft(c.start_date)
                 const end = getVigencyEnd(c.start_date)
                 const nightCost = nights * c.night_price
+                const sundayCost = sundays * (c.sunday_price || 25)
                 const pkg = PACKAGES[c.package]
                 return (
                   <div key={c.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:border-slate-200">
@@ -285,8 +299,9 @@ export default function AdminPage() {
                         {dl <= 5 && <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">⚠️ {dl}d restantes</span>}
                       </div>
                       <div className="text-xs text-slate-400 mt-0.5">
-                        {used}/{total} bloques · vence {end.toLocaleDateString('es-SV')}
-                        {nights > 0 && ` · ${nights} noches extra ($${nightCost})`}
+                        {used}/{total} bloques · vence {end.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                        {nights > 0 && ` · ${nights} noches ($${nightCost})`}
+                        {sundays > 0 && ` · ${sundays} domingos ($${sundayCost})`}
                       </div>
                       <div className="mt-1.5 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                         <div className={`h-full rounded-full ${pct >= 100 ? 'bg-red-400' : pct >= 75 ? 'bg-amber-400' : 'bg-blue-400'}`} style={{ width: `${pct}%` }} />
@@ -323,13 +338,15 @@ export default function AdminPage() {
                   {filtered.map(r => {
                     const c = clients.find(x => x.id === r.client_id)
                     const slot = SLOTS[r.slot as keyof typeof SLOTS]
+                    const isDom = isSunday(r.date)
                     return (
                       <div key={r.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50">
                         <span className={`w-2 h-2 rounded-full flex-shrink-0 ${r.slot === 'morning' ? 'bg-blue-400' : r.slot === 'afternoon' ? 'bg-green-400' : 'bg-amber-400'}`} />
                         <div className="flex-1 text-sm">
                           <span className="font-medium">{c?.name}</span>
-                          <span className="text-slate-400"> · {fmtDisplay(r.date)} · {slot.label} ({slot.time})</span>
-                          {r.slot === 'night' && <span className="ml-2 text-xs bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">+${c?.night_price}/noche</span>}
+                          <span className="text-slate-400"> · {new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })} · {slot.label}</span>
+                          {isDom && <span className="ml-1 text-xs text-purple-600">🗓️ dom +${c?.sunday_price || 25}</span>}
+                          {r.slot === 'night' && !isDom && <span className="ml-2 text-xs bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">+${c?.night_price}/noche</span>}
                         </div>
                         <button onClick={() => deleteReservation(r.id)} className="text-xs text-slate-300 hover:text-red-400">✕</button>
                       </div>
@@ -356,7 +373,7 @@ export default function AdminPage() {
           const res = await fetch('/api/reservations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
           const json = await res.json()
           if (!res.ok) { setAlert({ type: 'err', msg: json.error }); setShowNewRes(null); return }
-          setAlert({ type: 'ok', msg: `Reserva confirmada: ${json.date} · ${SLOTS[json.slot as keyof typeof SLOTS].label}` })
+          setAlert({ type: 'ok', msg: `Reserva confirmada: ${new Date(json.date + 'T12:00:00').toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })} · ${SLOTS[json.slot as keyof typeof SLOTS].label}` })
           setShowNewRes(null); loadData()
         }} />}
     </div>
@@ -365,7 +382,7 @@ export default function AdminPage() {
 
 function NewClientModal({ onClose, onSave }: { onClose: () => void; onSave: (d: object) => void }) {
   const today = fmtDate(new Date())
-  const [form, setForm] = useState({ name: '', contact: '', password: '', package: 'basic', start_date: today, night_price: 25 })
+  const [form, setForm] = useState({ name: '', contact: '', password: '', package: 'basic', start_date: today, night_price: 25, sunday_price: 25 })
   const set = (k: string, v: string | number) => setForm(f => ({ ...f, [k]: v }))
   const [copied, setCopied] = useState(false)
 
@@ -409,8 +426,16 @@ function NewClientModal({ onClose, onSave }: { onClose: () => void; onSave: (d: 
           <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.start_date} onChange={e => set('start_date', e.target.value)} />
         </div>
       </div>
-      <label className="text-xs text-slate-500">Precio bloque nocturno ($)</label>
-      <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-4" value={form.night_price} onChange={e => set('night_price', parseFloat(e.target.value))} />
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div>
+          <label className="text-xs text-slate-500">Precio noche extra ($)</label>
+          <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.night_price} onChange={e => set('night_price', parseFloat(e.target.value))} />
+        </div>
+        <div>
+          <label className="text-xs text-slate-500">Precio domingo ($)</label>
+          <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.sunday_price} onChange={e => set('sunday_price', parseFloat(e.target.value))} />
+        </div>
+      </div>
       <div className="flex gap-2 justify-end">
         <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg hover:bg-slate-100">Cancelar</button>
         <button onClick={() => onSave(form)} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Registrar</button>
@@ -424,16 +449,20 @@ function NewReservationModal({ clients, defaultDate, defaultSlot, onClose, onSav
   const today = fmtDate(new Date())
   const [form, setForm] = useState({ client_id: clients[0]?.id || '', date: defaultDate || today, slot: defaultSlot || 'morning' })
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
+  const isSelectedSunday = form.date ? isSunday(form.date) : false
   return (
     <Modal title="Nueva reserva" onClose={onClose}>
       <label className="text-xs text-slate-500">Cliente</label>
       <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-3 bg-white" value={form.client_id} onChange={e => set('client_id', e.target.value)}>
         {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
       </select>
-      <div className="grid grid-cols-2 gap-3 mb-4">
+      <div className="grid grid-cols-2 gap-3 mb-3">
         <div>
           <label className="text-xs text-slate-500">Fecha</label>
           <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.date} min={today} onChange={e => set('date', e.target.value)} />
+          {form.date && <div className="text-xs text-slate-400 mt-1">
+            {new Date(form.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}
+          </div>}
         </div>
         <div>
           <label className="text-xs text-slate-500">Turno</label>
@@ -444,7 +473,12 @@ function NewReservationModal({ clients, defaultDate, defaultSlot, onClose, onSav
           </select>
         </div>
       </div>
-      <div className="flex gap-2 justify-end">
+      {isSelectedSunday && (
+        <p className="text-xs text-purple-600 bg-purple-50 rounded-lg p-2 mb-3">
+          🗓️ Domingo — se cobrará el precio extra de domingo configurado para este cliente.
+        </p>
+      )}
+      <div className="flex gap-2 justify-end mt-2">
         <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg hover:bg-slate-100">Cancelar</button>
         <button onClick={() => onSave(form)} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Confirmar</button>
       </div>
