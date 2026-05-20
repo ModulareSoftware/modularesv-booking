@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { name, contact, package: pkg, start_date, night_price, password } = body
+  const { name, contact, package: pkg, start_date, night_price, sunday_price, password } = body
 
   if (!name || !pkg || !start_date || !contact || !password) {
     return NextResponse.json({ error: 'Faltan campos requeridos' }, { status: 400 })
@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
       package: pkg,
       start_date,
       night_price: night_price || 25,
+      sunday_price: sunday_price || 25,
       auth_user_id: authUser.user.id,
     })
     .select()
