@@ -5,6 +5,8 @@ import { supabase, Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getV
 
 const ADMIN_SECRET = 'Modular2024!'
 const DAYS_ES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+const DAYS_ES_SHORT = ['L', 'M', 'X', 'J', 'V', 'S']
+const MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
 function authHeaders() {
   return { 'Content-Type': 'application/json', 'x-admin-secret': ADMIN_SECRET }
@@ -13,9 +15,11 @@ function authHeaders() {
 export default function AdminPage() {
   const router = useRouter()
   const [tab, setTab] = useState<'calendar' | 'clients' | 'reservations'>('calendar')
+  const [calView, setCalView] = useState<'week' | 'month'>('week')
   const [clients, setClients] = useState<Client[]>([])
   const [reservations, setReservations] = useState<Reservation[]>([])
   const [weekOffset, setWeekOffset] = useState(0)
+  const [monthOffset, setMonthOffset] = useState(0)
   const [loading, setLoading] = useState(true)
   const [showNewClient, setShowNewClient] = useState(false)
   const [showNewRes, setShowNewRes] = useState<{ date?: string; slot?: string } | null>(null)
@@ -25,9 +29,7 @@ export default function AdminPage() {
   useEffect(() => {
     async function checkAuth() {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user || user.email !== ADMIN_EMAIL) {
-        router.push('/login')
-      }
+      if (!user || user.email !== ADMIN_EMAIL) router.push('/login')
     }
     checkAuth()
   }, [router])
@@ -46,6 +48,7 @@ export default function AdminPage() {
 
   useEffect(() => { loadData() }, [loadData])
 
+  // ── Week helpers ──
   function getWeekDays() {
     const today = new Date()
     const dow = today.getDay() === 0 ? 6 : today.getDay() - 1
@@ -56,11 +59,26 @@ export default function AdminPage() {
     })
   }
 
+  // ── Month helpers ──
+  function getMonthDays() {
+    const today = new Date()
+    const year = today.getFullYear()
+    const month = today.getMonth() + monthOffset
+    const ref = new Date(year, month, 1)
+    const firstDay = ref.getDay() === 0 ? 6 : ref.getDay() - 1
+    const daysInMonth = new Date(ref.getFullYear(), ref.getMonth() + 1, 0).getDate()
+    return { ref, firstDay, daysInMonth }
+  }
+
   const weekDays = getWeekDays()
   const todayStr = fmtDate(new Date())
 
   function getRes(dateStr: string, slot: string) {
     return reservations.find(r => r.date === dateStr && r.slot === slot)
+  }
+
+  function getResForDay(dateStr: string) {
+    return reservations.filter(r => r.date === dateStr)
   }
 
   function getClientUsage(c: Client) {
@@ -88,7 +106,15 @@ export default function AdminPage() {
     night:     'bg-amber-50 border-amber-300 text-amber-800',
   }
 
+  const slotDots: Record<string, string> = {
+    morning: 'bg-blue-400',
+    afternoon: 'bg-green-400',
+    night: 'bg-amber-400',
+  }
+
   if (loading) return <div className="min-h-screen flex items-center justify-center text-slate-400">Cargando datos…</div>
+
+  const { ref: monthRef, firstDay, daysInMonth } = getMonthDays()
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -114,49 +140,136 @@ export default function AdminPage() {
       <div className="p-4 max-w-6xl mx-auto">
         {tab === 'calendar' && (
           <div className="bg-white rounded-2xl border border-slate-200 p-4">
-            <div className="flex items-center gap-2 mb-4">
+            {/* Calendar header */}
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
               <h2 className="font-semibold text-slate-700 mr-auto">
-                {weekDays[0].toLocaleDateString('es-SV', { day: 'numeric', month: 'short' })} – {weekDays[5].toLocaleDateString('es-SV', { day: 'numeric', month: 'short', year: 'numeric' })}
+                {calView === 'week'
+                  ? `${weekDays[0].toLocaleDateString('es-SV', { day: 'numeric', month: 'short' })} – ${weekDays[5].toLocaleDateString('es-SV', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                  : `${MONTHS_ES[monthRef.getMonth()]} ${monthRef.getFullYear()}`
+                }
               </h2>
-              <button onClick={() => setWeekOffset(w => w - 1)} className="p-1.5 rounded-lg hover:bg-slate-100">‹</button>
-              <button onClick={() => setWeekOffset(0)} className="text-xs px-2 py-1.5 rounded-lg hover:bg-slate-100">Hoy</button>
-              <button onClick={() => setWeekOffset(w => w + 1)} className="p-1.5 rounded-lg hover:bg-slate-100">›</button>
+
+              {/* View toggle */}
+              <div className="flex bg-slate-100 rounded-lg p-0.5 gap-0.5">
+                <button onClick={() => setCalView('week')}
+                  className={`text-xs px-3 py-1.5 rounded-md transition-all ${calView === 'week' ? 'bg-white shadow-sm font-medium' : 'text-slate-500'}`}>
+                  Semana
+                </button>
+                <button onClick={() => setCalView('month')}
+                  className={`text-xs px-3 py-1.5 rounded-md transition-all ${calView === 'month' ? 'bg-white shadow-sm font-medium' : 'text-slate-500'}`}>
+                  Mes
+                </button>
+              </div>
+
+              {calView === 'week' ? (
+                <>
+                  <button onClick={() => setWeekOffset(w => w - 1)} className="p-1.5 rounded-lg hover:bg-slate-100">‹</button>
+                  <button onClick={() => setWeekOffset(0)} className="text-xs px-2 py-1.5 rounded-lg hover:bg-slate-100">Hoy</button>
+                  <button onClick={() => setWeekOffset(w => w + 1)} className="p-1.5 rounded-lg hover:bg-slate-100">›</button>
+                </>
+              ) : (
+                <>
+                  <button onClick={() => setMonthOffset(m => m - 1)} className="p-1.5 rounded-lg hover:bg-slate-100">‹</button>
+                  <button onClick={() => setMonthOffset(0)} className="text-xs px-2 py-1.5 rounded-lg hover:bg-slate-100">Hoy</button>
+                  <button onClick={() => setMonthOffset(m => m + 1)} className="p-1.5 rounded-lg hover:bg-slate-100">›</button>
+                </>
+              )}
+
               <button onClick={() => setShowNewRes({})} className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700">+ Reserva</button>
             </div>
-            <div className="grid gap-1" style={{ gridTemplateColumns: '72px repeat(6, 1fr)' }}>
-              <div />
-              {weekDays.map(d => (
-                <div key={d.toISOString()} className={`text-center text-xs font-medium py-1 rounded-lg ${fmtDate(d) === todayStr ? 'bg-blue-50 text-blue-600' : 'text-slate-400'}`}>
-                  {DAYS_ES[d.getDay()]}<br /><span className="font-semibold text-sm">{d.getDate()}</span>
+
+            {/* ── WEEK VIEW ── */}
+            {calView === 'week' && (
+              <>
+                <div className="grid gap-1" style={{ gridTemplateColumns: '72px repeat(6, 1fr)' }}>
+                  <div />
+                  {weekDays.map(d => (
+                    <div key={d.toISOString()} className={`text-center text-xs font-medium py-1 rounded-lg ${fmtDate(d) === todayStr ? 'bg-blue-50 text-blue-600' : 'text-slate-400'}`}>
+                      {DAYS_ES[d.getDay()]}<br /><span className="font-semibold text-sm">{d.getDate()}</span>
+                    </div>
+                  ))}
+                  {(['morning', 'afternoon', 'night'] as const).map(slot => (
+                    <>
+                      <div key={slot + '-label'} className="flex items-center justify-end pr-2 text-xs text-slate-400">
+                        {SLOTS[slot].emoji}<br />{slot === 'morning' ? '7–12' : slot === 'afternoon' ? '1–5' : '6–9'}
+                      </div>
+                      {weekDays.map(d => {
+                        const dateStr = fmtDate(d)
+                        const res = getRes(dateStr, slot)
+                        const client = res ? clients.find(c => c.id === res.client_id) : null
+                        return (
+                          <div key={dateStr + slot}
+                            onClick={() => res ? deleteReservation(res.id) : setShowNewRes({ date: dateStr, slot })}
+                            className={`min-h-14 rounded-xl border cursor-pointer transition-all flex flex-col items-center justify-center text-center p-1 ${res ? slotColors[slot] : 'border-slate-100 bg-slate-50 hover:border-blue-300 hover:bg-blue-50'}`}
+                            title={res ? `${client?.name} — clic para cancelar` : 'Clic para reservar'}>
+                            {client ? <span className="text-xs font-medium leading-tight">{client.name.split(' ')[0]}</span> : <span className="text-slate-200 text-lg">+</span>}
+                          </div>
+                        )
+                      })}
+                    </>
+                  ))}
                 </div>
-              ))}
-              {(['morning', 'afternoon', 'night'] as const).map(slot => (
-                <>
-                  <div key={slot + '-label'} className="flex items-center justify-end pr-2 text-xs text-slate-400">
-                    {SLOTS[slot].emoji}<br />{slot === 'morning' ? '7–12' : slot === 'afternoon' ? '1–5' : '6–9'}
-                  </div>
-                  {weekDays.map(d => {
-                    const dateStr = fmtDate(d)
-                    const res = getRes(dateStr, slot)
-                    const client = res ? clients.find(c => c.id === res.client_id) : null
+                <div className="flex gap-4 mt-3 text-xs text-slate-400 flex-wrap">
+                  <span><span className="inline-block w-3 h-3 rounded bg-blue-200 mr-1" />Mañana</span>
+                  <span><span className="inline-block w-3 h-3 rounded bg-green-200 mr-1" />Tarde</span>
+                  <span><span className="inline-block w-3 h-3 rounded bg-amber-200 mr-1" />Noche extra</span>
+                  <span className="ml-auto">Clic en celda ocupada = cancelar reserva</span>
+                </div>
+              </>
+            )}
+
+            {/* ── MONTH VIEW ── */}
+            {calView === 'month' && (
+              <>
+                <div className="grid grid-cols-6 gap-1 mb-1">
+                  {DAYS_ES_SHORT.map(d => (
+                    <div key={d} className="text-center text-xs font-medium text-slate-400 py-1">{d}</div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-6 gap-1">
+                  {/* Empty cells before first day */}
+                  {Array.from({ length: firstDay }).map((_, i) => (
+                    <div key={'empty-' + i} />
+                  ))}
+                  {/* Day cells */}
+                  {Array.from({ length: daysInMonth }).map((_, i) => {
+                    const day = i + 1
+                    const dateStr = `${monthRef.getFullYear()}-${String(monthRef.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+                    const dayRes = getResForDay(dateStr)
+                    const isToday = dateStr === todayStr
+                    const isSunday = new Date(dateStr + 'T12:00:00').getDay() === 0
+
                     return (
-                      <div key={dateStr + slot}
-                        onClick={() => res ? deleteReservation(res.id) : setShowNewRes({ date: dateStr, slot })}
-                        className={`min-h-14 rounded-xl border cursor-pointer transition-all flex flex-col items-center justify-center text-center p-1 ${res ? slotColors[slot] : 'border-slate-100 bg-slate-50 hover:border-blue-300 hover:bg-blue-50'}`}
-                        title={res ? `${client?.name} — clic para cancelar` : 'Clic para reservar'}>
-                        {client ? <span className="text-xs font-medium leading-tight">{client.name.split(' ')[0]}</span> : <span className="text-slate-200 text-lg">+</span>}
+                      <div key={dateStr}
+                        onClick={() => !isSunday && setShowNewRes({ date: dateStr })}
+                        className={`min-h-16 rounded-xl border p-1.5 transition-all ${isToday ? 'border-blue-300 bg-blue-50' : isSunday ? 'border-slate-100 bg-slate-50 opacity-40' : 'border-slate-100 hover:border-slate-300 cursor-pointer'}`}>
+                        <div className={`text-xs font-semibold mb-1 ${isToday ? 'text-blue-600' : 'text-slate-500'}`}>{day}</div>
+                        <div className="flex flex-col gap-0.5">
+                          {dayRes.map(r => {
+                            const c = clients.find(x => x.id === r.client_id)
+                            return (
+                              <div key={r.id}
+                                onClick={e => { e.stopPropagation(); deleteReservation(r.id) }}
+                                className={`flex items-center gap-1 px-1 py-0.5 rounded text-xs cursor-pointer hover:opacity-75 ${r.slot === 'morning' ? 'bg-blue-100 text-blue-700' : r.slot === 'afternoon' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}
+                                title={`${c?.name} · ${SLOTS[r.slot as keyof typeof SLOTS].label} — clic para cancelar`}>
+                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${slotDots[r.slot]}`} />
+                                <span className="truncate">{c?.name.split(' ')[0]}</span>
+                              </div>
+                            )
+                          })}
+                        </div>
                       </div>
                     )
                   })}
-                </>
-              ))}
-            </div>
-            <div className="flex gap-4 mt-3 text-xs text-slate-400 flex-wrap">
-              <span><span className="inline-block w-3 h-3 rounded bg-blue-200 mr-1" />Mañana</span>
-              <span><span className="inline-block w-3 h-3 rounded bg-green-200 mr-1" />Tarde</span>
-              <span><span className="inline-block w-3 h-3 rounded bg-amber-200 mr-1" />Noche extra</span>
-              <span className="ml-auto">Clic en celda ocupada = cancelar reserva</span>
-            </div>
+                </div>
+                <div className="flex gap-4 mt-3 text-xs text-slate-400 flex-wrap">
+                  <span><span className="inline-block w-3 h-3 rounded bg-blue-200 mr-1" />Mañana</span>
+                  <span><span className="inline-block w-3 h-3 rounded bg-green-200 mr-1" />Tarde</span>
+                  <span><span className="inline-block w-3 h-3 rounded bg-amber-200 mr-1" />Noche extra</span>
+                  <span className="ml-auto">Clic en día = nueva reserva · Clic en bloque = cancelar</span>
+                </div>
+              </>
+            )}
           </div>
         )}
 
