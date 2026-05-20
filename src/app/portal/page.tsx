@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase, Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getVigencyEnd, fmtDisplay, ADMIN_EMAIL } from '@/lib/supabase'
+import { supabase, Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getVigencyEnd, fmtDisplay, ADMIN_EMAIL, isSunday, countsAgainstQuota } from '@/lib/supabase'
 
 export default function PortalPage() {
   const router = useRouter()
@@ -20,19 +20,13 @@ export default function PortalPage() {
       if (user.email === ADMIN_EMAIL) { router.push('/admin'); return }
 
       const { data: byUserId } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('auth_user_id', user.id)
-        .single()
+        .from('clients').select('*').eq('auth_user_id', user.id).single()
 
       if (byUserId) {
         setClient(byUserId)
       } else {
         const { data: byEmail } = await supabase
-          .from('clients')
-          .select('*')
-          .eq('contact', user.email)
-          .single()
+          .from('clients').select('*').eq('contact', user.email).single()
         if (byEmail) setClient(byEmail)
       }
       setLoading(false)
@@ -43,8 +37,7 @@ export default function PortalPage() {
   useEffect(() => {
     if (!client) return
     fetch(`/api/reservations?client_id=${client.id}`)
-      .then(r => r.json())
-      .then(setReservations)
+      .then(r => r.json()).then(setReservations)
   }, [client])
 
   async function logout() {
@@ -88,14 +81,22 @@ export default function PortalPage() {
     </div>
   )
 
-  const used = reservations.filter(r => r.slot !== 'night').length
-  const nights = reservations.filter(r => r.slot === 'night').length
+  // Calculate usage
+  const usedQuota = reservations.filter(r => countsAgainstQuota(r.date, r.slot)).length
+  const nights = reservations.filter(r => r.slot === 'night' && !isSunday(r.date)).length
+  const sundays = reservations.filter(r => isSunday(r.date)).length
   const total = PACKAGES[client.package].blocks
-  const remaining = total - used
-  const pct = Math.round((used / total) * 100)
+  const remaining = total - usedQuota
+  const pct = Math.round((usedQuota / total) * 100)
   const dl = daysLeft(client.start_date)
   const end = getVigencyEnd(client.start_date)
   const nightCost = nights * client.night_price
+  const sundayCost = sundays * (client.sunday_price || 25)
+
+  const isSelectedSunday = isSunday(date)
+  const isSelectedNight = slot === 'night'
+  const isExtra = isSelectedSunday || isSelectedNight
+  const canBook = isExtra || remaining > 0
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -106,6 +107,7 @@ export default function PortalPage() {
       </nav>
 
       <div className="max-w-lg mx-auto p-4 space-y-4">
+        {/* Summary */}
         <div className="bg-white rounded-2xl border border-slate-200 p-4">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-11 h-11 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-semibold">
@@ -119,27 +121,33 @@ export default function PortalPage() {
               {dl}d restantes
             </span>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-2">
             <div className="bg-slate-50 rounded-xl p-3">
-              <div className="text-xs text-slate-400 mb-1">Bloques usados</div>
-              <div className="text-xl font-semibold">{used}/{total}</div>
+              <div className="text-xs text-slate-400 mb-1">Usados</div>
+              <div className="text-xl font-semibold">{usedQuota}/{total}</div>
             </div>
             <div className="bg-slate-50 rounded-xl p-3">
               <div className="text-xs text-slate-400 mb-1">Disponibles</div>
               <div className={`text-xl font-semibold ${remaining === 0 ? 'text-red-500' : remaining <= 1 ? 'text-amber-500' : 'text-green-600'}`}>{remaining}</div>
             </div>
             <div className="bg-slate-50 rounded-xl p-3">
-              <div className="text-xs text-slate-400 mb-1">Noches extra</div>
+              <div className="text-xs text-slate-400 mb-1">Noches</div>
               <div className="text-xl font-semibold">{nights}</div>
               {nightCost > 0 && <div className="text-xs text-amber-600">${nightCost}</div>}
+            </div>
+            <div className="bg-slate-50 rounded-xl p-3">
+              <div className="text-xs text-slate-400 mb-1">Domingos</div>
+              <div className="text-xl font-semibold">{sundays}</div>
+              {sundayCost > 0 && <div className="text-xs text-amber-600">${sundayCost}</div>}
             </div>
           </div>
           <div className="mt-3 h-2 bg-slate-100 rounded-full overflow-hidden">
             <div className={`h-full rounded-full ${pct >= 100 ? 'bg-red-400' : pct >= 75 ? 'bg-amber-400' : 'bg-blue-400'}`} style={{ width: `${pct}%` }} />
           </div>
-          <div className="text-xs text-slate-400 mt-2">Vigencia hasta {end.toLocaleDateString('es-SV')}</div>
+          <div className="text-xs text-slate-400 mt-2">Vigencia hasta {end.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
         </div>
 
+        {/* Make reservation */}
         <div className="bg-white rounded-2xl border border-slate-200 p-4">
           <h3 className="font-semibold text-slate-700 mb-3">Reservar un bloque</h3>
           {alert && (
@@ -152,6 +160,9 @@ export default function PortalPage() {
               <label className="text-xs text-slate-500 mb-1 block">Fecha</label>
               <input type="date" min={fmtDate(new Date())} value={date} onChange={e => setDate(e.target.value)}
                 className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
+              {date && <div className="text-xs text-slate-400 mt-1">
+                {new Date(date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}
+              </div>}
             </div>
             <div>
               <label className="text-xs text-slate-500 mb-1 block">Turno</label>
@@ -163,20 +174,33 @@ export default function PortalPage() {
               </select>
             </div>
           </div>
-          {slot === 'night' && (
-            <p className="text-xs text-amber-600 bg-amber-50 rounded-lg p-2 mb-3">
-              🌙 Costo extra de <strong>${client.night_price}</strong> por día. Tu administrador te cobrará por separado.
+
+          {isSelectedSunday && (
+            <p className="text-xs text-purple-600 bg-purple-50 rounded-lg p-2 mb-3">
+              🗓️ Domingo: costo extra de <strong>${client.sunday_price || 25}</strong> por bloque. Tu administrador te cobrará por separado.
             </p>
           )}
-          <button onClick={makeReservation} disabled={saving || (remaining === 0 && slot !== 'night')}
+          {isSelectedNight && !isSelectedSunday && (
+            <p className="text-xs text-amber-600 bg-amber-50 rounded-lg p-2 mb-3">
+              🌙 Noche extra: costo de <strong>${client.night_price}</strong> por bloque. Tu administrador te cobrará por separado.
+            </p>
+          )}
+          {isSelectedSunday && isSelectedNight && (
+            <p className="text-xs text-purple-600 bg-purple-50 rounded-lg p-2 mb-3">
+              🗓️🌙 Domingo nocturno: costo extra de <strong>${client.sunday_price || 25}</strong> por bloque.
+            </p>
+          )}
+
+          <button onClick={makeReservation} disabled={saving || !canBook}
             className="w-full bg-blue-600 text-white rounded-xl py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
             {saving ? 'Confirmando…' : '📅 Confirmar reserva'}
           </button>
-          {remaining === 0 && slot !== 'night' && (
+          {!canBook && (
             <p className="text-xs text-red-500 text-center mt-2">No tienes bloques disponibles en tu paquete actual.</p>
           )}
         </div>
 
+        {/* My reservations */}
         <div className="bg-white rounded-2xl border border-slate-200 p-4">
           <h3 className="font-semibold text-slate-700 mb-3">Mis reservas</h3>
           {reservations.length === 0 && <p className="text-slate-400 text-sm text-center py-4">Sin reservas activas</p>}
@@ -184,13 +208,18 @@ export default function PortalPage() {
             {reservations.sort((a, b) => a.date.localeCompare(b.date)).map(r => {
               const slotInfo = SLOTS[r.slot as keyof typeof SLOTS]
               const isPast = new Date(r.date + 'T23:59:00') < new Date()
+              const isDom = isSunday(r.date)
+              const extraCost = isDom ? (client.sunday_price || 25) : r.slot === 'night' ? client.night_price : 0
               return (
                 <div key={r.id} className={`flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 ${isPast ? 'opacity-50' : ''}`}>
                   <span className={`w-2 h-2 rounded-full flex-shrink-0 ${r.slot === 'morning' ? 'bg-blue-400' : r.slot === 'afternoon' ? 'bg-green-400' : 'bg-amber-400'}`} />
                   <div className="flex-1 text-sm">
-                    <span className="font-medium">{fmtDisplay(r.date)}</span>
-                    <span className="text-slate-400"> · {slotInfo.label} · {slotInfo.time}</span>
-                    {r.slot === 'night' && <span className="ml-2 text-xs text-amber-600">+${client.night_price}</span>}
+                    <span className="font-medium">
+                      {new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}
+                    </span>
+                    <span className="text-slate-400"> · {slotInfo.label}</span>
+                    {isDom && <span className="ml-1 text-xs text-purple-600">🗓️ dom</span>}
+                    {extraCost > 0 && <span className="ml-2 text-xs text-amber-600">+${extraCost}</span>}
                     {isPast && <span className="ml-2 text-xs text-slate-300">pasado</span>}
                   </div>
                   {!isPast && <button onClick={() => cancelReservation(r.id)} className="text-xs text-slate-300 hover:text-red-400">✕</button>}
