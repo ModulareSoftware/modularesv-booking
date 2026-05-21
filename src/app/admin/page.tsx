@@ -219,13 +219,7 @@ export default function AdminPage() {
     return true
   })
 
-  const billingReservations = (clientId: string) => reservations.filter(r => {
-    if (r.client_id !== clientId) return false
-    const d = new Date(r.date + 'T12:00:00')
-    if (billingMonth2 !== '' && d.getMonth() !== parseInt(billingMonth2)) return false
-    if (billingYear !== '' && d.getFullYear() !== parseInt(billingYear)) return false
-    return true
-  })
+  const billingReservations = (clientId: string) => reservations.filter(r => r.client_id === clientId)
   const totalNetoMes = billingClients.reduce((sum, c) => sum + getClientBilling(c).totalNeto, 0)
   const totalIvaMes = totalNetoMes * IVA
   const totalConIvaMes = totalNetoMes * (1 + IVA)
