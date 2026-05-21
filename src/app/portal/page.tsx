@@ -4,11 +4,14 @@ import { useRouter } from 'next/navigation'
 import { supabase, Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getVigencyEnd, ADMIN_EMAIL, isSunday, countsAgainstQuota, displayName, fmt$, DEPOSIT_STATUS } from '@/lib/supabase'
 
 const IVA = 0.13
+const DAYS_SHORT = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+const MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
 export default function PortalPage() {
   const router = useRouter()
   const [client, setClient] = useState<Client | null>(null)
   const [reservations, setReservations] = useState<Reservation[]>([])
+  const [allReservations, setAllReservations] = useState<Reservation[]>([])
   const [billingMonth, setBillingMonth] = useState<any>(null)
   const [date, setDate] = useState(fmtDate(new Date()))
   const [slot, setSlot] = useState('morning')
@@ -16,6 +19,7 @@ export default function PortalPage() {
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [portalTab, setPortalTab] = useState<'reservas' | 'facturacion'>('reservas')
+  const [calMonthOffset, setCalMonthOffset] = useState(0)
 
   useEffect(() => {
     async function init() {
@@ -43,11 +47,13 @@ export default function PortalPage() {
   }, [router])
 
   async function loadClientData(clientId: string) {
-    const [resRes, billRes] = await Promise.all([
+    const [resRes, allResRes, billRes] = await Promise.all([
       fetch(`/api/reservations?client_id=${clientId}`),
+      fetch(`/api/reservations`),
       fetch(`/api/billing?client_id=${clientId}`),
     ])
     setReservations(await resRes.json())
+    setAllReservations(await allResRes.json())
     const bills = await billRes.json()
     if (bills.length > 0) setBillingMonth(bills[0])
   }
@@ -76,6 +82,7 @@ export default function PortalPage() {
     if (!confirm('¿Cancelar esta reserva?')) return
     await fetch(`/api/reservations/${id}`, { method: 'DELETE' })
     setReservations(prev => prev.filter(r => r.id !== id))
+    setAllReservations(prev => prev.filter(r => r.id !== id))
   }
 
   if (loading) return (
@@ -118,10 +125,7 @@ export default function PortalPage() {
 
   const extraReservations = reservations
     .filter(r => r.slot === 'night' || isSunday(r.date))
-    .map(r => ({
-      ...r,
-      chargeStatus: (r as any).charge_status || 'programado'
-    }))
+    .map(r => ({ ...r, chargeStatus: (r as any).charge_status || 'programado' }))
     .sort((a, b) => a.date.localeCompare(b.date))
 
   const isSelectedSunday = isSunday(date)
@@ -134,6 +138,31 @@ export default function PortalPage() {
     return { label: '🔒 Programado', color: 'bg-slate-100 text-slate-500' }
   }
 
+  // Calendar helpers
+  const today = new Date()
+  const calYear = today.getFullYear()
+  const calMonth = today.getMonth() + calMonthOffset
+  const calRef = new Date(calYear, calMonth, 1)
+  const calFirstDay = calRef.getDay()
+  const calDaysInMonth = new Date(calYear, calMonth + 1, 0).getDate()
+  const todayStr = (() => { return `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}` })()
+
+  function getDateStr(day: number) {
+    return `${calRef.getFullYear()}-${String(calRef.getMonth()+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`
+  }
+
+  function getDayReservations(dateStr: string) {
+    const mine = reservations.filter(r => r.date === dateStr)
+    const others = allReservations.filter(r => r.date === dateStr && r.client_id !== client.id)
+    return { mine, others }
+  }
+
+  const slotDot: Record<string, string> = {
+    morning: 'bg-blue-400',
+    afternoon: 'bg-green-400',
+    night: 'bg-amber-400',
+  }
+
   return (
     <div className="min-h-screen bg-slate-50">
       <nav className="bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3">
@@ -142,10 +171,10 @@ export default function PortalPage() {
         <button onClick={logout} className="text-xs text-slate-400 hover:text-slate-600">Salir</button>
       </nav>
 
-      <div className="max-w-lg mx-auto p-4 space-y-4">
+      <div className="max-w-5xl mx-auto p-4">
 
-        {/* Summary card */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-4">
+        {/* Summary card — full width */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 mb-4">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-11 h-11 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-semibold">
               {displayName(client).split(' ').map((x: string) => x[0]).slice(0, 2).join('')}
@@ -186,7 +215,7 @@ export default function PortalPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex bg-slate-100 rounded-xl p-1 gap-1">
+        <div className="flex bg-slate-100 rounded-xl p-1 gap-1 mb-4">
           <button onClick={() => setPortalTab('reservas')}
             className={`flex-1 text-sm py-2 rounded-lg transition-all ${portalTab === 'reservas' ? 'bg-white shadow-sm font-medium' : 'text-slate-500'}`}>
             📅 Mis reservas
@@ -197,96 +226,159 @@ export default function PortalPage() {
           </button>
         </div>
 
-        {/* ── RESERVAS ── */}
+        {/* ── RESERVAS TAB ── */}
         {portalTab === 'reservas' && (
-          <>
-            <div className="bg-white rounded-2xl border border-slate-200 p-4">
-              <h3 className="font-semibold text-slate-700 mb-3">Reservar un bloque</h3>
-              {alert && (
-                <div className={`text-sm rounded-xl p-3 mb-3 ${alert.type === 'ok' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-                  {alert.msg}
-                </div>
-              )}
-              <div className="grid grid-cols-2 gap-3 mb-3">
-                <div>
-                  <label className="text-xs text-slate-500 mb-1 block">Fecha</label>
-                  <input type="date" min={fmtDate(new Date())} value={date} onChange={e => setDate(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
-                  {date && <div className="text-xs text-slate-400 mt-1">
-                    {new Date(date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}
-                  </div>}
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500 mb-1 block">Turno</label>
-                  <select value={slot} onChange={e => setSlot(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white">
-                    <option value="morning">☀️ Mañana (7am–12pm)</option>
-                    <option value="afternoon">🌤️ Tarde (1pm–5pm)</option>
-                    <option value="night">🌙 Noche extra (6pm–9pm)</option>
-                  </select>
-                </div>
-              </div>
-              {isSelectedSunday && !isSelectedNight && (
-                <p className="text-xs text-purple-600 bg-purple-50 rounded-lg p-2 mb-3">
-                  🗓️ Domingo: costo extra de <strong>{fmt$(client.sunday_price || 25)}</strong> por bloque.
-                </p>
-              )}
-              {isSelectedNight && !isSelectedSunday && (
-                <p className="text-xs text-amber-600 bg-amber-50 rounded-lg p-2 mb-3">
-                  🌙 Noche extra: costo de <strong>{fmt$(client.night_price)}</strong> por bloque.
-                </p>
-              )}
-              {isSelectedSunday && isSelectedNight && (
-                <p className="text-xs text-purple-600 bg-purple-50 rounded-lg p-2 mb-3">
-                  🗓️🌙 Domingo nocturno: costo extra de <strong>{fmt$(client.sunday_price || 25)}</strong> por bloque.
-                </p>
-              )}
-              <button onClick={makeReservation} disabled={saving || !canBook}
-                className="w-full bg-blue-600 text-white rounded-xl py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                {saving ? 'Confirmando…' : '📅 Confirmar reserva'}
-              </button>
-              {!canBook && <p className="text-xs text-red-500 text-center mt-2">No tienes bloques disponibles en tu paquete actual.</p>}
-            </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
+            {/* LEFT — Calendar */}
             <div className="bg-white rounded-2xl border border-slate-200 p-4">
-              <h3 className="font-semibold text-slate-700 mb-3">Mis reservas</h3>
-              {reservations.length === 0 && <p className="text-slate-400 text-sm text-center py-4">Sin reservas activas</p>}
-              <div className="space-y-2">
-                {reservations.sort((a, b) => a.date.localeCompare(b.date)).map(r => {
-                  const slotInfo = SLOTS[r.slot as keyof typeof SLOTS]
-                  const isPast = new Date(r.date + 'T23:59:00') < new Date()
-                  const isDom = isSunday(r.date)
-                  const extraCost = isDom ? (client.sunday_price || 25) : r.slot === 'night' ? client.night_price : 0
+              <div className="flex items-center gap-2 mb-3">
+                <h3 className="font-semibold text-slate-700 mr-auto">
+                  {MONTHS_ES[calRef.getMonth()]} {calRef.getFullYear()}
+                </h3>
+                <button onClick={() => setCalMonthOffset(o => o - 1)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400">‹</button>
+                <button onClick={() => setCalMonthOffset(0)} className="text-xs px-2 py-1 rounded-lg hover:bg-slate-100 text-slate-400">Hoy</button>
+                <button onClick={() => setCalMonthOffset(o => o + 1)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400">›</button>
+              </div>
+
+              {/* Day headers */}
+              <div className="grid grid-cols-7 gap-0.5 mb-1">
+                {DAYS_SHORT.map((d, i) => (
+                  <div key={d} className={`text-center text-xs font-medium py-1 ${i === 0 ? 'text-purple-400' : 'text-slate-400'}`}>{d}</div>
+                ))}
+              </div>
+
+              {/* Day cells */}
+              <div className="grid grid-cols-7 gap-0.5">
+                {Array.from({ length: calFirstDay }).map((_, i) => <div key={'e-' + i} />)}
+                {Array.from({ length: calDaysInMonth }).map((_, i) => {
+                  const day = i + 1
+                  const dateStr = getDateStr(day)
+                  const { mine, others } = getDayReservations(dateStr)
+                  const isToday = dateStr === todayStr
+                  const isDom = new Date(dateStr + 'T12:00:00').getDay() === 0
+                  const hasOthers = others.length > 0
+                  const hasMine = mine.length > 0
+
                   return (
-                    <div key={r.id} className={`flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 ${isPast ? 'opacity-50' : ''}`}>
-                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${r.slot === 'morning' ? 'bg-blue-400' : r.slot === 'afternoon' ? 'bg-green-400' : 'bg-amber-400'}`} />
-                      <div className="flex-1 text-sm">
-                        <span className="font-medium">
-                          {new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}
-                        </span>
-                        <span className="text-slate-400"> · {slotInfo.label}</span>
-                        {isDom && <span className="ml-1 text-xs text-purple-600">🗓️ dom</span>}
-                        {extraCost > 0 && <span className="ml-2 text-xs text-amber-600">+{fmt$(extraCost)}</span>}
-                        {isPast && <span className="ml-2 text-xs text-slate-300">pasado</span>}
+                    <div key={dateStr}
+                      className={`rounded-lg p-1 min-h-12 flex flex-col
+                        ${isToday ? 'bg-blue-50 border border-blue-200' : isDom ? 'bg-purple-50' : 'bg-slate-50'}
+                      `}>
+                      <span className={`text-xs font-semibold mb-0.5 ${isToday ? 'text-blue-600' : isDom ? 'text-purple-500' : 'text-slate-500'}`}>{day}</span>
+                      <div className="flex flex-col gap-0.5">
+                        {mine.map(r => (
+                          <div key={r.id} className={`w-full h-1.5 rounded-full ${slotDot[r.slot]}`} title={`Tu reserva · ${SLOTS[r.slot as keyof typeof SLOTS].label}`} />
+                        ))}
+                        {hasOthers && !hasMine && (
+                          <div className="w-full h-1.5 rounded-full bg-slate-300" title="Espacio ocupado" />
+                        )}
+                        {hasOthers && hasMine && (
+                          <div className="w-full h-1.5 rounded-full bg-slate-300" title="Otro turno ocupado" />
+                        )}
                       </div>
-                      {!isPast && <button onClick={() => cancelReservation(r.id)} className="text-xs text-slate-300 hover:text-red-400">✕</button>}
                     </div>
                   )
                 })}
               </div>
+
+              {/* Legend */}
+              <div className="flex flex-wrap gap-3 mt-3 text-xs text-slate-400">
+                <span><span className="inline-block w-2 h-2 rounded-full bg-blue-400 mr-1" />Mañana</span>
+                <span><span className="inline-block w-2 h-2 rounded-full bg-green-400 mr-1" />Tarde</span>
+                <span><span className="inline-block w-2 h-2 rounded-full bg-amber-400 mr-1" />Noche</span>
+                <span><span className="inline-block w-2 h-2 rounded-full bg-slate-300 mr-1" />Ocupado</span>
+              </div>
             </div>
-          </>
+
+            {/* RIGHT — Reservar + lista */}
+            <div className="space-y-4">
+              <div className="bg-white rounded-2xl border border-slate-200 p-4">
+                <h3 className="font-semibold text-slate-700 mb-3">Reservar un bloque</h3>
+                {alert && (
+                  <div className={`text-sm rounded-xl p-3 mb-3 ${alert.type === 'ok' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                    {alert.msg}
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 block">Fecha</label>
+                    <input type="date" min={fmtDate(new Date())} value={date} onChange={e => setDate(e.target.value)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
+                    {date && <div className="text-xs text-slate-400 mt-1">
+                      {new Date(date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}
+                    </div>}
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 block">Turno</label>
+                    <select value={slot} onChange={e => setSlot(e.target.value)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white">
+                      <option value="morning">☀️ Mañana (7am–12pm)</option>
+                      <option value="afternoon">🌤️ Tarde (1pm–5pm)</option>
+                      <option value="night">🌙 Noche extra (6pm–9pm)</option>
+                    </select>
+                  </div>
+                </div>
+                {isSelectedSunday && !isSelectedNight && (
+                  <p className="text-xs text-purple-600 bg-purple-50 rounded-lg p-2 mb-3">
+                    🗓️ Domingo: costo extra de <strong>{fmt$(client.sunday_price || 25)}</strong> por bloque.
+                  </p>
+                )}
+                {isSelectedNight && !isSelectedSunday && (
+                  <p className="text-xs text-amber-600 bg-amber-50 rounded-lg p-2 mb-3">
+                    🌙 Noche extra: costo de <strong>{fmt$(client.night_price)}</strong> por bloque.
+                  </p>
+                )}
+                {isSelectedSunday && isSelectedNight && (
+                  <p className="text-xs text-purple-600 bg-purple-50 rounded-lg p-2 mb-3">
+                    🗓️🌙 Domingo nocturno: costo extra de <strong>{fmt$(client.sunday_price || 25)}</strong> por bloque.
+                  </p>
+                )}
+                <button onClick={makeReservation} disabled={saving || !canBook}
+                  className="w-full bg-blue-600 text-white rounded-xl py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                  {saving ? 'Confirmando…' : '📅 Confirmar reserva'}
+                </button>
+                {!canBook && <p className="text-xs text-red-500 text-center mt-2">No tienes bloques disponibles en tu paquete actual.</p>}
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200 p-4">
+                <h3 className="font-semibold text-slate-700 mb-3">Mis reservas</h3>
+                {reservations.length === 0 && <p className="text-slate-400 text-sm text-center py-4">Sin reservas activas</p>}
+                <div className="space-y-2">
+                  {reservations.sort((a, b) => a.date.localeCompare(b.date)).map(r => {
+                    const slotInfo = SLOTS[r.slot as keyof typeof SLOTS]
+                    const isPast = new Date(r.date + 'T23:59:00') < new Date()
+                    const isDom = isSunday(r.date)
+                    const extraCost = isDom ? (client.sunday_price || 25) : r.slot === 'night' ? client.night_price : 0
+                    return (
+                      <div key={r.id} className={`flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 ${isPast ? 'opacity-50' : ''}`}>
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${r.slot === 'morning' ? 'bg-blue-400' : r.slot === 'afternoon' ? 'bg-green-400' : 'bg-amber-400'}`} />
+                        <div className="flex-1 text-sm">
+                          <span className="font-medium">
+                            {new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}
+                          </span>
+                          <span className="text-slate-400"> · {slotInfo.label}</span>
+                          {isDom && <span className="ml-1 text-xs text-purple-600">🗓️ dom</span>}
+                          {extraCost > 0 && <span className="ml-2 text-xs text-amber-600">+{fmt$(extraCost)}</span>}
+                          {isPast && <span className="ml-2 text-xs text-slate-300">pasado</span>}
+                        </div>
+                        {!isPast && <button onClick={() => cancelReservation(r.id)} className="text-xs text-slate-300 hover:text-red-400">✕</button>}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
         )}
 
-        {/* ── FACTURACIÓN ── */}
+        {/* ── FACTURACIÓN TAB ── */}
         {portalTab === 'facturacion' && (
           <div className="bg-white rounded-2xl border border-slate-200 p-4">
             <div className="mb-4">
               <h3 className="font-semibold text-slate-700">Resumen de facturación</h3>
               <p className="text-xs text-slate-400 mt-0.5">Mes en curso · IVA 13%</p>
             </div>
-
-            {/* Métricas */}
             <div className="grid grid-cols-3 gap-3 mb-5">
               <div className="bg-slate-50 rounded-xl p-3">
                 <div className="text-xs text-slate-400 mb-1">Neto</div>
@@ -301,8 +393,6 @@ export default function PortalPage() {
                 <div className="text-lg font-semibold text-white">{fmt$(totalConIva)}</div>
               </div>
             </div>
-
-            {/* Desglose */}
             <div className="border border-slate-100 rounded-xl overflow-hidden mb-4">
               <div className="grid grid-cols-4 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-400 border-b border-slate-100">
                 <span>Concepto</span>
@@ -310,8 +400,6 @@ export default function PortalPage() {
                 <span className="text-right">IVA</span>
                 <span className="text-right">Total</span>
               </div>
-
-              {/* Paquete con estado */}
               <div className="px-3 py-2.5 text-sm border-b border-slate-50">
                 <div className="grid grid-cols-4 items-start">
                   <div>
@@ -326,8 +414,6 @@ export default function PortalPage() {
                   <span className="text-right font-medium">{fmt$(baseNeto + baseIva)}</span>
                 </div>
               </div>
-
-              {/* Noches con estado individual */}
               {extraReservations.filter(r => r.slot === 'night' && !isSunday(r.date)).length > 0 && (
                 <div className="border-b border-slate-50">
                   <div className="grid grid-cols-4 px-3 py-2 text-sm items-start">
@@ -353,8 +439,6 @@ export default function PortalPage() {
                   </div>
                 </div>
               )}
-
-              {/* Domingos con estado individual */}
               {extraReservations.filter(r => isSunday(r.date)).length > 0 && (
                 <div className="border-b border-slate-50">
                   <div className="grid grid-cols-4 px-3 py-2 text-sm items-start">
@@ -380,8 +464,6 @@ export default function PortalPage() {
                   </div>
                 </div>
               )}
-
-              {/* Total */}
               <div className="grid grid-cols-4 px-3 py-2.5 text-sm bg-slate-50 font-semibold">
                 <span className="text-slate-700">Total mes</span>
                 <span className="text-right text-slate-700">{fmt$(totalNeto)}</span>
@@ -389,8 +471,6 @@ export default function PortalPage() {
                 <span className="text-right text-blue-600">{fmt$(totalConIva)}</span>
               </div>
             </div>
-
-            {/* Depósito */}
             {client.deposit_amount > 0 && depStatus && (
               <div className={`rounded-xl border p-3 ${
                 client.deposit_status === 'pagado' ? 'border-green-100 bg-green-50' :
@@ -416,7 +496,6 @@ export default function PortalPage() {
                 </div>
               </div>
             )}
-
             <p className="text-xs text-slate-300 text-center mt-4">
               Este resumen es informativo. Tu administrador emitirá la factura oficial.
             </p>
