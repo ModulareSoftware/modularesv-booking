@@ -558,7 +558,7 @@ export default function AdminPage() {
                             <div key={r.id} className="flex items-center gap-2 text-xs">
                               <span className="text-slate-400">{new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit' })}</span>
                               <span className="flex-1" />
-                              <button onClick={() => markChargeStatus(r.id, r.chargeStatus === 'cobrado' ? 'por_cobrar' : 'cobrado')}
+                              <button onClick={() => markChargeStatus(r.id, r.chargeStatus === 'cobrado' ? 'por_cobrar' : 'cobrado') }
                                 className={`px-2 py-0.5 rounded-full font-medium transition-all ${
                                   r.chargeStatus === 'cobrado' ? 'bg-green-50 text-green-600 hover:bg-green-100' :
                                   r.chargeStatus === 'por_cobrar' ? 'bg-orange-50 text-orange-600 hover:bg-orange-100' :
