@@ -155,7 +155,7 @@ export default function PortalPage() {
       <nav className="bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3">
         <div className="flex items-center gap-3">
   <img
-    src="/Logo_M_Negro.png"
+    src="/Logo%20M%20Negro.png"
     alt="Modulare"
     className="w-10 h-10 object-contain"
   />
