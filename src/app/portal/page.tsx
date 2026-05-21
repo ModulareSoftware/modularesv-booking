@@ -404,16 +404,25 @@ const extraCost = isDom ? (client.sunday_price || 25) : r.slot === 'night' ? cli
                   </div>
                 </div>
               )}
-              {extraBlocksCount > 0 && (
+             {extraBlocksCount > 0 && (
   <div className="border-b border-slate-50">
     <div className="grid grid-cols-4 px-3 py-2 text-sm items-start">
-      <div>
-        <span className="text-slate-600">Bloques extra</span>
-        <span className="text-xs text-slate-400 block">{extraBlocksCount} × {fmt$(extraBlockPrice)}</span>
-      </div>
-      <span className="text-right text-slate-600">{fmt$(extraBlocksCount * extraBlockPrice)}</span>
-      <span className="text-right text-slate-400">{fmt$(extraBlocksCount * extraBlockPrice * 0.13)}</span>
-      <span className="text-right font-medium">{fmt$(extraBlocksCount * extraBlockPrice * 1.13)}</span>
+      <div><span className="text-slate-600">Bloques extra</span><span className="text-xs text-slate-400 block">{extraBlocksCount} × {fmt$(extraBlockPrice)}</span></div>
+      <span className="text-right text-slate-600">{fmt$(extraBlockNeto)}</span>
+      <span className="text-right text-slate-400">{fmt$(extraBlockNeto * 0.13)}</span>
+      <span className="text-right font-medium">{fmt$(extraBlockNeto * 1.13)}</span>
+    </div>
+    <div className="px-3 pb-2 space-y-1">
+      {reservations.filter(r => countsAgainstQuota(r.date, r.slot)).slice(total).map(r => {
+        const cs = chargeStatusLabel((r as any).charge_status || 'programado')
+        return (
+          <div key={r.id} className="flex items-center gap-2 text-xs">
+            <span className="text-slate-400">{new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit' })}</span>
+            <span className="flex-1" />
+            <span className={`px-2 py-0.5 rounded-full font-medium ${cs.color}`}>{cs.label}</span>
+          </div>
+        )
+      })}
     </div>
   </div>
 )}
