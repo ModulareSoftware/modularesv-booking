@@ -291,11 +291,13 @@ export default function PortalPage() {
                         <div key={r.id} className={`w-full h-2 rounded-full ${slotDot[r.slot]}`} title={SLOTS[r.slot as keyof typeof SLOTS].label} />
                       ))}
                      {others.map((r, i) => (
-  <div key={i} className={`w-full h-2 rounded-full opacity-40 ${
-    r.slot === 'morning' ? 'bg-blue-400' :
-    r.slot === 'afternoon' ? 'bg-green-400' :
-    'bg-amber-400'
-  }`} title={`Turno ocupado: ${r.slot === 'morning' ? 'Mañana' : r.slot === 'afternoon' ? 'Tarde' : 'Noche'}`} />
+  <div key={i} className="w-full h-2 rounded-full bg-slate-300 flex items-center">
+    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+      r.slot === 'morning' ? 'bg-blue-400' :
+      r.slot === 'afternoon' ? 'bg-green-400' :
+      'bg-amber-400'
+    }`} />
+  </div>
 ))}
                     </div>
                   </div>
