@@ -71,12 +71,20 @@ export default function PortalPage() {
     loadClientData(client.id)
   }
 
-  async function cancelReservation(id: string) {
-    if (!confirm('¿Cancelar esta reserva?')) return
-    await fetch(`/api/reservations/${id}`, { method: 'DELETE' })
-    setReservations(prev => prev.filter(r => r.id !== id))
-    setAllReservations(prev => prev.filter(r => r.id !== id))
+  async function cancelReservation(id: string, date: string) {
+  const resDate = new Date(date + 'T00:00:00')
+  const hoy = new Date()
+  hoy.setHours(0, 0, 0, 0)
+  const diffDays = Math.ceil((resDate.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24))
+  if (diffDays <= 2) {
+    setAlert({ type: 'err', msg: '⚠️ No puedes cancelar una reserva con 2 días o menos de anticipación. Contacta al administrador.' })
+    return
   }
+  if (!confirm('¿Cancelar esta reserva?')) return
+  await fetch(`/api/reservations/${id}`, { method: 'DELETE' })
+  setReservations(prev => prev.filter(r => r.id !== id))
+  setAllReservations(prev => prev.filter(r => r.id !== id))
+}
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-slate-400 text-sm">Cargando…</div>
 
