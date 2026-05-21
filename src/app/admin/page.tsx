@@ -973,7 +973,7 @@ function NewReservationModal({ clients, defaultDate, defaultSlot, onClose, onSav
   )
 }
 function EditReservationModal({ reservation, clients, onClose, onSave, onDelete }:
-  { reservation: Reservation; clients: Client[]; onClose: () => void; onSave: (date: string, slot: string) => void; onDelete: () => void }) {
+  { reservation: Reservation; clients: Client[]; onClose: () => void; onSave: (date: string, slot: 'morning' | 'afternoon' | 'night') => void; onDelete: () => void }) {
   const isPast = new Date(reservation.date + 'T23:59:00') < new Date()
   const client = clients.find(c => c.id === reservation.client_id)
   const [date, setDate] = useState(reservation.date)
