@@ -35,6 +35,7 @@ export default function AdminPage() {
   const [showNewClient, setShowNewClient] = useState(false)
   const [editingClient, setEditingClient] = useState<Client | null>(null)
   const [showNewRes, setShowNewRes] = useState<{ date?: string; slot?: string } | null>(null)
+const [editingRes, setEditingRes] = useState<Reservation | null>(null)
   const [filterClient, setFilterClient] = useState('')
   const [billingClient, setBillingClient] = useState('')
   const [billingVigency, setBillingVigency] = useState('')
@@ -188,11 +189,25 @@ export default function AdminPage() {
     loadData()
   }
 
-  async function deleteReservation(id: string) {
+  async function deleteReservation(id: string, isPast: boolean) {
+  if (isPast) {
+    if (!confirm('⚠️ Esta reserva es del pasado. ¿Estás seguro de que quieres eliminarla?')) return
+    if (!confirm('Segunda confirmación: se eliminará del historial permanentemente. ¿Continuar?')) return
+  } else {
     if (!confirm('¿Cancelar esta reserva?')) return
-    await fetch(`/api/reservations/${id}`, { method: 'DELETE', headers: authHeaders() })
-    loadData()
   }
+  await fetch(`/api/reservations/${id}`, { method: 'DELETE', headers: authHeaders() })
+  loadData()
+}
+
+async function editReservation(id: string, date: string, slot: string) {
+  await fetch(`/api/reservations/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date, slot }),
+  })
+  loadData()
+}
 
   async function deleteClient(id: string) {
     if (!confirm('¿Eliminar cliente y todas sus reservas?')) return
@@ -308,7 +323,7 @@ export default function AdminPage() {
                         const isDom = d.getDay() === 0
                         return (
                           <div key={dateStr + slot}
-                            onClick={() => res ? deleteReservation(res.id) : setShowNewRes({ date: dateStr, slot })}
+                            onClick={() => res ? setEditingRes(res) : setShowNewRes({ date: dateStr, slot })}
                             className={`min-h-12 rounded-xl border cursor-pointer transition-all flex flex-col items-center justify-center text-center p-1
                               ${res ? slotColors[slot] : isDom ? 'border-purple-100 bg-purple-50 hover:border-purple-300' : 'border-slate-100 bg-slate-50 hover:border-blue-300 hover:bg-blue-50'}`}>
                             {client ? <span className="text-xs font-medium leading-tight">{displayName(client).split(' ')[0]}</span> : <span className={`text-lg ${isDom ? 'text-purple-200' : 'text-slate-200'}`}>+</span>}
@@ -352,7 +367,7 @@ export default function AdminPage() {
                           {dayRes.map(r => {
                             const c = clients.find(x => x.id === r.client_id)
                             return (
-                              <div key={r.id} onClick={e => { e.stopPropagation(); deleteReservation(r.id) }}
+                              <div key={r.id} onClick={e => { e.stopPropagation(); setEditingRes(r) }}
                                 className={`flex items-center gap-1 px-1 py-0.5 rounded text-xs cursor-pointer hover:opacity-75
                                   ${r.slot === 'morning' ? 'bg-blue-100 text-blue-700' : r.slot === 'afternoon' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
                                 <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${slotDots[r.slot]}`} />
@@ -461,7 +476,7 @@ export default function AdminPage() {
                           {isDom && <span className="ml-1 text-xs text-purple-600">🗓️ dom</span>}
                           {r.slot === 'night' && !isDom && <span className="ml-2 text-xs bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">noche</span>}
                         </div>
-                        <button onClick={() => deleteReservation(r.id)} className="text-xs text-slate-300 hover:text-red-400">✕</button>
+                        <button onClick={() => setEditingRes(r)} className="text-xs text-slate-300 hover:text-red-400">✕</button>
                       </div>
                     )
                   })}
@@ -687,7 +702,26 @@ export default function AdminPage() {
         setAlert({ type: 'ok', msg: `✅ Cliente actualizado.` })
         setEditingClient(null); loadData()
       }} />}
-
+{editingRes && <EditReservationModal
+  reservation={editingRes}
+  clients={clients}
+  onClose={() => setEditingRes(null)}
+  onSave={async (date, slot) => {
+    const isPast = new Date(editingRes.date + 'T23:59:00') < new Date()
+    if (isPast) {
+      if (!confirm('⚠️ Esta reserva es del pasado. ¿Estás seguro de modificarla?')) return
+    }
+    await editReservation(editingRes.id, date, slot)
+    setAlert({ type: 'ok', msg: `✅ Reserva actualizada.` })
+    setEditingRes(null)
+    loadData()
+  }}
+  onDelete={async () => {
+    const isPast = new Date(editingRes.date + 'T23:59:00') < new Date()
+    await deleteReservation(editingRes.id, isPast)
+    setEditingRes(null)
+  }}
+/>}
       {showNewRes !== null && <NewReservationModal clients={clients} defaultDate={showNewRes.date} defaultSlot={showNewRes.slot}
         onClose={() => setShowNewRes(null)}
         onSave={async (data) => {
@@ -938,7 +972,51 @@ function NewReservationModal({ clients, defaultDate, defaultSlot, onClose, onSav
     </Modal>
   )
 }
-
+function EditReservationModal({ reservation, clients, onClose, onSave, onDelete }:
+  { reservation: Reservation; clients: Client[]; onClose: () => void; onSave: (date: string, slot: string) => void; onDelete: () => void }) {
+  const isPast = new Date(reservation.date + 'T23:59:00') < new Date()
+  const client = clients.find(c => c.id === reservation.client_id)
+  const [date, setDate] = useState(reservation.date)
+  const [slot, setSlot] = useState(reservation.slot)
+  return (
+    <Modal title="Editar reserva" onClose={onClose}>
+      {isPast && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded-xl p-3 mb-4">
+          ⚠️ Esta reserva es del pasado. Cualquier cambio o eliminación afectará el historial.
+        </div>
+      )}
+      <div className="text-sm text-slate-500 mb-4">
+        Cliente: <span className="font-medium text-slate-700">{client ? displayName(client) : '?'}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-3 mb-5">
+        <div>
+          <label className="text-xs text-slate-500">Fecha</label>
+          <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={date} onChange={e => setDate(e.target.value)} />
+          {date && <div className="text-xs text-slate-400 mt-1">
+            {new Date(date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}
+          </div>}
+        </div>
+        <div>
+          <label className="text-xs text-slate-500">Turno</label>
+          <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" value={slot} onChange={e => setSlot(e.target.value)}>
+            <option value="morning">☀️ Mañana (7am–12pm)</option>
+            <option value="afternoon">🌤️ Tarde (1pm–5pm)</option>
+            <option value="night">🌙 Noche extra (6pm–9pm)</option>
+          </select>
+        </div>
+      </div>
+      <div className="flex gap-2 justify-between">
+        <button onClick={onDelete} className="px-4 py-2 text-sm text-red-500 border border-red-200 rounded-lg hover:bg-red-50">
+          Eliminar
+        </button>
+        <div className="flex gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg hover:bg-slate-100">Cancelar</button>
+          <button onClick={() => onSave(date, slot)} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Guardar</button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
