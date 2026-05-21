@@ -103,7 +103,9 @@ export default function PortalPage() {
   const nights = reservations.filter(r => r.slot === 'night' && !isSunday(r.date)).length
   const sundays = reservations.filter(r => isSunday(r.date)).length
   const total = PACKAGES[client.package].blocks
-  const remaining = total - usedQuota
+  const remaining = Math.max(0, total - usedQuota)
+const extraBlocks = reservations.filter(r => countsAgainstQuota(r.date, r.slot)).length - total
+const extraBlocksCount = extraBlocks > 0 ? extraBlocks : 0
   const pct = Math.round((usedQuota / total) * 100)
   const dl = daysLeft(client.start_date)
   const end = getVigencyEnd(client.start_date)
@@ -111,7 +113,8 @@ export default function PortalPage() {
   const baseNeto = pkg.price
   const nightNeto = nights * client.night_price
   const sundayNeto = sundays * (client.sunday_price || 25)
-  const totalNeto = baseNeto + nightNeto + sundayNeto
+  const extraBlockNeto = extraBlocksCount * extraBlockPrice
+const totalNeto = baseNeto + nightNeto + sundayNeto + extraBlockNeto
   const baseIva = baseNeto * IVA
   const nightIva = nightNeto * IVA
   const sundayIva = sundayNeto * IVA
@@ -192,11 +195,12 @@ const canBook = isSelectedSunday || isSelectedNight || remaining > 0 || isExtraB
               {dl}d restantes
             </span>
           </div>
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-5 gap-2">
             <div className="bg-slate-50 rounded-xl p-3"><div className="text-xs text-slate-400 mb-1">Usados</div><div className="text-xl font-semibold">{usedQuota}/{total}</div></div>
             <div className="bg-slate-50 rounded-xl p-3"><div className="text-xs text-slate-400 mb-1">Disponibles</div><div className={`text-xl font-semibold ${remaining === 0 ? 'text-red-500' : remaining <= 1 ? 'text-amber-500' : 'text-green-600'}`}>{remaining}</div></div>
             <div className="bg-slate-50 rounded-xl p-3"><div className="text-xs text-slate-400 mb-1">Noches</div><div className="text-xl font-semibold">{nights}</div>{nights > 0 && <div className="text-xs text-amber-600">{fmt$(nightNeto)}</div>}</div>
             <div className="bg-slate-50 rounded-xl p-3"><div className="text-xs text-slate-400 mb-1">Domingos</div><div className="text-xl font-semibold">{sundays}</div>{sundays > 0 && <div className="text-xs text-purple-600">{fmt$(sundayNeto)}</div>}</div>
+            <div className="bg-slate-50 rounded-xl p-3"><div className="text-xs text-slate-400 mb-1">Extras</div><div className={`text-xl font-semibold ${extraBlocksCount > 0 ? 'text-blue-600' : ''}`}>{extraBlocksCount}</div>{extraBlocksCount > 0 && <div className="text-xs text-blue-600">{fmt$(extraBlocksCount * extraBlockPrice)}</div>}</div>
           </div>
           <div className="mt-3 h-2 bg-slate-100 rounded-full overflow-hidden">
             <div className={`h-full rounded-full ${pct >= 100 ? 'bg-red-400' : pct >= 75 ? 'bg-amber-400' : 'bg-blue-400'}`} style={{ width: `${pct}%` }} />
@@ -250,7 +254,8 @@ const canBook = isSelectedSunday || isSelectedNight || remaining > 0 || isExtraB
                   const slotInfo = SLOTS[r.slot as keyof typeof SLOTS]
                   const isPast = new Date(r.date + 'T23:59:00') < new Date()
                   const isDom = isSunday(r.date)
-                  const extraCost = isDom ? (client.sunday_price || 25) : r.slot === 'night' ? client.night_price : 0
+                  const isExtraBlockRes = !isDom && r.slot !== 'night' && countsAgainstQuota(r.date, r.slot) && reservations.filter(rx => countsAgainstQuota(rx.date, rx.slot)).indexOf(r) >= total
+const extraCost = isDom ? (client.sunday_price || 25) : r.slot === 'night' ? client.night_price : isExtraBlockRes ? extraBlockPrice : 0
                   return (
                     <div key={r.id} className={`flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 ${isPast ? 'opacity-50' : ''}`}>
                       <span className={`w-2 h-2 rounded-full flex-shrink-0 ${r.slot === 'morning' ? 'bg-blue-400' : r.slot === 'afternoon' ? 'bg-green-400' : 'bg-amber-400'}`} />
@@ -398,6 +403,19 @@ const canBook = isSelectedSunday || isSelectedNight || remaining > 0 || isExtraB
                   </div>
                 </div>
               )}
+              {extraBlocksCount > 0 && (
+  <div className="border-b border-slate-50">
+    <div className="grid grid-cols-4 px-3 py-2 text-sm items-start">
+      <div>
+        <span className="text-slate-600">Bloques extra</span>
+        <span className="text-xs text-slate-400 block">{extraBlocksCount} × {fmt$(extraBlockPrice)}</span>
+      </div>
+      <span className="text-right text-slate-600">{fmt$(extraBlocksCount * extraBlockPrice)}</span>
+      <span className="text-right text-slate-400">{fmt$(extraBlocksCount * extraBlockPrice * 0.13)}</span>
+      <span className="text-right font-medium">{fmt$(extraBlocksCount * extraBlockPrice * 1.13)}</span>
+    </div>
+  </div>
+)}
               <div className="grid grid-cols-4 px-3 py-2.5 text-sm bg-slate-50 font-semibold">
                 <span className="text-slate-700">Total mes</span>
                 <span className="text-right text-slate-700">{fmt$(totalNeto)}</span>
