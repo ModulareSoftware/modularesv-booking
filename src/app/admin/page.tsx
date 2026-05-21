@@ -163,7 +163,7 @@ export default function AdminPage() {
         package_status: newStatus,
       }),
     })
-    loadData()
+    await loadData()
   }
 
   async function markChargeStatus(reservationId: string, status: string) {
@@ -172,7 +172,7 @@ export default function AdminPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ charge_status: status }),
     })
-    loadData()
+    await loadData()
   }
 
   async function markAllExtras(c: Client, status: string) {
