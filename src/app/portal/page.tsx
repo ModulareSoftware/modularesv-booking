@@ -325,7 +325,7 @@ export default function PortalPage() {
                 </div>
                 {isSelectedSunday && !isSelectedNight && (
                   <p className="text-xs text-purple-600 bg-purple-50 rounded-lg p-2 mb-3">
-                    🗓️ Domingo: costo extra de <strong>{fmt$(client.sunday_price || 25)}</strong> por bloque.
+                    Domingo: costo extra de <strong>{fmt$(client.sunday_price || 25)}</strong> por bloque.
                   </p>
                 )}
                 {isSelectedNight && !isSelectedSunday && (
@@ -335,7 +335,7 @@ export default function PortalPage() {
                 )}
                 {isSelectedSunday && isSelectedNight && (
                   <p className="text-xs text-purple-600 bg-purple-50 rounded-lg p-2 mb-3">
-                    🗓️🌙 Domingo nocturno: costo extra de <strong>{fmt$(client.sunday_price || 25)}</strong> por bloque.
+                    Domingo nocturno: costo extra de <strong>{fmt$(client.sunday_price || 25)}</strong> por bloque.
                   </p>
                 )}
                 <button onClick={makeReservation} disabled={saving || !canBook}
@@ -362,7 +362,7 @@ export default function PortalPage() {
                             {new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}
                           </span>
                           <span className="text-slate-400"> · {slotInfo.label}</span>
-                          {isDom && <span className="ml-1 text-xs text-purple-600">🗓️ dom</span>}
+                          {isDom && <span className="ml-1 text-xs text-purple-600">dom</span>}
                           {extraCost > 0 && <span className="ml-2 text-xs text-amber-600">+{fmt$(extraCost)}</span>}
                           {isPast && <span className="ml-2 text-xs text-slate-300">pasado</span>}
                         </div>
