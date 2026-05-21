@@ -37,8 +37,6 @@ export default function AdminPage() {
   const [showNewRes, setShowNewRes] = useState<{ date?: string; slot?: string } | null>(null)
   const [filterClient, setFilterClient] = useState('')
   const [billingClient, setBillingClient] = useState('')
-  const [billingMonth2, setBillingMonth2] = useState('')
-  const [billingYear, setBillingYear] = useState('')
   const [billingVigency, setBillingVigency] = useState('')
   const [alert, setAlert] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null)
 
