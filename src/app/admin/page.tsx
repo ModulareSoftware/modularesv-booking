@@ -70,7 +70,7 @@ export default function AdminPage() {
     const today = new Date()
     const dow = today.getDay() === 0 ? 7 : today.getDay()
     const monday = new Date(today)
-    monday.setDate(today.getDate() - (dow - 1) + weekOffset * 7)
+    monday.setDate(today.getDate() - dow + 1 + weekOffset * 7)
     return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(monday); d.setDate(monday.getDate() + i); return d
     })
