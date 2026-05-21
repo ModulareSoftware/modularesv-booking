@@ -1,10 +1,9 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase, Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getVigencyEnd, fmtDisplay, ADMIN_EMAIL, isSunday, countsAgainstQuota, displayName } from '@/lib/supabase'
+import { supabase, Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getVigencyEnd, ADMIN_EMAIL, isSunday, countsAgainstQuota, displayName, fmt$, DEPOSIT_STATUS } from '@/lib/supabase'
 
 const IVA = 0.13
-function fmt$(n: number) { return `$${n.toFixed(2)}` }
 
 export default function PortalPage() {
   const router = useRouter()
@@ -60,7 +59,7 @@ export default function PortalPage() {
     const json = await res.json()
     setSaving(false)
     if (!res.ok) { setAlert({ type: 'err', msg: json.error }); return }
-    setAlert({ type: 'ok', msg: `✅ Reserva confirmada: ${fmtDisplay(json.date)} · ${SLOTS[json.slot as keyof typeof SLOTS].label}` })
+    setAlert({ type: 'ok', msg: `✅ Reserva confirmada: ${new Date(json.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })} · ${SLOTS[json.slot as keyof typeof SLOTS].label}` })
     fetch(`/api/reservations?client_id=${client.id}`).then(r => r.json()).then(setReservations)
   }
 
@@ -106,6 +105,8 @@ export default function PortalPage() {
   const sundayIva = sundayNeto * IVA
   const totalIva = totalNeto * IVA
   const totalConIva = totalNeto * (1 + IVA)
+
+  const depStatus = client.deposit_status ? DEPOSIT_STATUS[client.deposit_status] : null
 
   const isSelectedSunday = isSunday(date)
   const isSelectedNight = slot === 'night'
@@ -174,7 +175,7 @@ export default function PortalPage() {
           </button>
         </div>
 
-        {/* ── RESERVAS TAB ── */}
+        {/* ── RESERVAS ── */}
         {portalTab === 'reservas' && (
           <>
             <div className="bg-white rounded-2xl border border-slate-200 p-4">
@@ -255,7 +256,7 @@ export default function PortalPage() {
           </>
         )}
 
-        {/* ── FACTURACIÓN TAB ── */}
+        {/* ── FACTURACIÓN ── */}
         {portalTab === 'facturacion' && (
           <div className="bg-white rounded-2xl border border-slate-200 p-4">
             <div className="mb-4">
@@ -279,16 +280,14 @@ export default function PortalPage() {
               </div>
             </div>
 
-            {/* Desglose */}
-            <div className="border border-slate-100 rounded-xl overflow-hidden">
+            {/* Desglose mensual */}
+            <div className="border border-slate-100 rounded-xl overflow-hidden mb-4">
               <div className="grid grid-cols-4 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-400 border-b border-slate-100">
                 <span>Concepto</span>
                 <span className="text-right">Neto</span>
                 <span className="text-right">IVA</span>
                 <span className="text-right">Total</span>
               </div>
-
-              {/* Paquete base */}
               <div className="grid grid-cols-4 px-3 py-2.5 text-sm border-b border-slate-50">
                 <span className="text-slate-600">
                   Paquete {pkg.label}
@@ -298,8 +297,6 @@ export default function PortalPage() {
                 <span className="text-right text-slate-400">{fmt$(baseIva)}</span>
                 <span className="text-right font-medium">{fmt$(baseNeto + baseIva)}</span>
               </div>
-
-              {/* Noches */}
               {nights > 0 && (
                 <div className="grid grid-cols-4 px-3 py-2.5 text-sm border-b border-slate-50">
                   <span className="text-slate-600">
@@ -311,8 +308,6 @@ export default function PortalPage() {
                   <span className="text-right font-medium">{fmt$(nightNeto + nightIva)}</span>
                 </div>
               )}
-
-              {/* Domingos */}
               {sundays > 0 && (
                 <div className="grid grid-cols-4 px-3 py-2.5 text-sm border-b border-slate-50">
                   <span className="text-slate-600">
@@ -324,15 +319,40 @@ export default function PortalPage() {
                   <span className="text-right font-medium">{fmt$(sundayNeto + sundayIva)}</span>
                 </div>
               )}
-
-              {/* Total */}
               <div className="grid grid-cols-4 px-3 py-2.5 text-sm bg-slate-50 font-semibold">
-                <span className="text-slate-700">Total</span>
+                <span className="text-slate-700">Total mes</span>
                 <span className="text-right text-slate-700">{fmt$(totalNeto)}</span>
                 <span className="text-right text-slate-500">{fmt$(totalIva)}</span>
                 <span className="text-right text-blue-600">{fmt$(totalConIva)}</span>
               </div>
             </div>
+
+            {/* Depósito de garantía */}
+            {client.deposit_amount > 0 && depStatus && (
+              <div className={`rounded-xl border p-3 ${
+                client.deposit_status === 'pagado' ? 'border-green-100 bg-green-50' :
+                client.deposit_status === 'devuelto' ? 'border-blue-100 bg-blue-50' :
+                client.deposit_status === 'retenido' ? 'border-red-100 bg-red-50' :
+                'border-amber-100 bg-amber-50'
+              }`}>
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">🔒</span>
+                  <div className="flex-1">
+                    <div className="font-medium text-sm">Depósito de garantía</div>
+                    <div className="text-xs text-slate-500 mt-0.5">
+                      {client.deposit_status === 'pendiente' && 'Pendiente de pago — comunícate con tu administrador.'}
+                      {client.deposit_status === 'pagado' && `Pagado el ${client.deposit_date ? new Date(client.deposit_date + 'T12:00:00').toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'} · Se devuelve al finalizar el contrato mínimo de 3 meses.`}
+                      {client.deposit_status === 'devuelto' && 'Depósito devuelto. ¡Gracias por tu estadía!'}
+                      {client.deposit_status === 'retenido' && 'Depósito retenido por no cumplir el contrato mínimo de 3 meses.'}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-semibold text-sm">{fmt$(client.deposit_amount)}</div>
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${depStatus.color}`}>{depStatus.label}</span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <p className="text-xs text-slate-300 text-center mt-4">
               Este resumen es informativo. Tu administrador emitirá la factura oficial.
