@@ -739,7 +739,7 @@ function NewClientModal({ onClose, onSave }: { onClose: () => void; onSave: (d: 
   const today = fmtDate(new Date())
   const [form, setForm] = useState({
     name: '', company_name: '', contact: '', password: '', package: 'basic',
-    start_date: today, night_price: 25, sunday_price: 25,
+    start_date: today, night_price: 25, sunday_price: 25, extra_block_price: 25,
     deposit_amount: 0, deposit_status: 'pendiente', deposit_date: today,
   })
   const set = (k: string, v: string | number) => setForm(f => ({ ...f, [k]: v }))
@@ -772,16 +772,20 @@ function NewClientModal({ onClose, onSave }: { onClose: () => void; onSave: (d: 
         {form.password && <button onClick={copyPassword} className={`px-3 py-2 text-xs rounded-lg border ${copied ? 'bg-green-50 text-green-600 border-green-200' : 'border-slate-200 hover:bg-slate-50'}`}>{copied ? '✓ Copiado' : 'Copiar'}</button>}
       </div>
       <p className="text-xs text-slate-400 mb-3">Comparte este correo y contraseña con el cliente.</p>
-      <div className="grid grid-cols-2 gap-3 mb-3">
-        <div>
-          <label className="text-xs text-slate-500">Paquete</label>
-          <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" value={form.package} onChange={e => { set('package', e.target.value); set('deposit_amount', PACKAGES[e.target.value as keyof typeof PACKAGES].price * 0.5) }}>
-            <option value="premium">🥇 Premium — 10 bloques</option>
-            <option value="basic">🥈 Básico — 6 bloques</option>
-            <option value="lite">🥉 Lite — 3 bloques</option>
-          </select>
-        </div>
-        <div>
+      <div className="grid grid-cols-3 gap-3 mb-3">
+  <div>
+    <label className="text-xs text-slate-500">Precio noche extra ($)</label>
+    <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.night_price} onChange={e => set('night_price', parseFloat(e.target.value))} />
+  </div>
+  <div>
+    <label className="text-xs text-slate-500">Precio domingo ($)</label>
+    <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.sunday_price} onChange={e => set('sunday_price', parseFloat(e.target.value))} />
+  </div>
+  <div>
+    <label className="text-xs text-slate-500">Bloque extra ($)</label>
+    <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.extra_block_price} onChange={e => set('extra_block_price', parseFloat(e.target.value))} />
+  </div>
+</div>
           <label className="text-xs text-slate-500">Inicio vigencia</label>
           <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.start_date} onChange={e => set('start_date', e.target.value)} />
         </div>
@@ -831,7 +835,7 @@ function EditClientModal({ client, onClose, onSave }: { client: Client; onClose:
   const [form, setForm] = useState({
     name: client.name, company_name: client.company_name || '', contact: client.contact || '',
     password: '', package: client.package, start_date: client.start_date,
-    night_price: client.night_price, sunday_price: client.sunday_price || 25,
+    night_price: client.night_price, sunday_price: client.sunday_price || 25, extra_block_price: (client as any).extra_block_price || 25,
     deposit_amount: client.deposit_amount || 0, deposit_status: client.deposit_status || 'pendiente',
     deposit_date: client.deposit_date || fmtDate(new Date()),
   })
@@ -877,16 +881,20 @@ function EditClientModal({ client, onClose, onSave }: { client: Client; onClose:
         {form.password && <button onClick={copyPassword} className={`px-3 py-2 text-xs rounded-lg border ${copied ? 'bg-green-50 text-green-600 border-green-200' : 'border-slate-200 hover:bg-slate-50'}`}>{copied ? '✓ Copiado' : 'Copiar'}</button>}
       </div>
       <p className="text-xs text-slate-400 mb-3">Si generas una nueva contraseña, compártela con el cliente.</p>
-      <div className="grid grid-cols-2 gap-3 mb-3">
-        <div>
-          <label className="text-xs text-slate-500">Paquete</label>
-          <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" value={form.package} onChange={e => set('package', e.target.value)}>
-            <option value="premium">🥇 Premium — 10 bloques</option>
-            <option value="basic">🥈 Básico — 6 bloques</option>
-            <option value="lite">🥉 Lite — 3 bloques</option>
-          </select>
-        </div>
-        <div>
+      <div className="grid grid-cols-3 gap-3 mb-3">
+  <div>
+    <label className="text-xs text-slate-500">Precio noche extra ($)</label>
+    <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.night_price} onChange={e => set('night_price', parseFloat(e.target.value))} />
+  </div>
+  <div>
+    <label className="text-xs text-slate-500">Precio domingo ($)</label>
+    <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.sunday_price} onChange={e => set('sunday_price', parseFloat(e.target.value))} />
+  </div>
+  <div>
+    <label className="text-xs text-slate-500">Bloque extra ($)</label>
+    <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.extra_block_price} onChange={e => set('extra_block_price', parseFloat(e.target.value))} />
+  </div>
+</div>
           <label className="text-xs text-slate-500">Inicio vigencia</label>
           <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.start_date} onChange={e => set('start_date', e.target.value)} />
         </div>
