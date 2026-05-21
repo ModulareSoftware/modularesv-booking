@@ -977,7 +977,7 @@ function EditReservationModal({ reservation, clients, onClose, onSave, onDelete 
   const isPast = new Date(reservation.date + 'T23:59:00') < new Date()
   const client = clients.find(c => c.id === reservation.client_id)
   const [date, setDate] = useState(reservation.date)
-  const [slot, setSlot] = useState(reservation.slot)
+  const [slot, setSlot] = useState<'morning' | 'afternoon' | 'night'>(reservation.slot)
   return (
     <Modal title="Editar reserva" onClose={onClose}>
       {isPast && (
