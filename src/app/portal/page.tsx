@@ -235,6 +235,7 @@ const canBook = isSelectedSunday || isSelectedNight || remaining > 0 || isExtraB
               {isSelectedSunday && !isSelectedNight && <p className="text-xs text-purple-600 bg-purple-50 rounded-lg p-2 mb-3">Domingo: costo extra de <strong>{fmt$(client.sunday_price || 25)}</strong> por bloque.</p>}
               {isSelectedNight && !isSelectedSunday && <p className="text-xs text-amber-600 bg-amber-50 rounded-lg p-2 mb-3">Noche extra: costo de <strong>{fmt$(client.night_price)}</strong> por bloque.</p>}
               {isSelectedSunday && isSelectedNight && <p className="text-xs text-purple-600 bg-purple-50 rounded-lg p-2 mb-3">Domingo nocturno: costo extra de <strong>{fmt$(client.sunday_price || 25)}</strong> por bloque.</p>}
+              {isExtraBlock && <p className="text-xs text-blue-600 bg-blue-50 rounded-lg p-2 mb-3">Paquete agotado: se aplicará cargo extra de <strong>{fmt$(extraBlockPrice)}</strong> por este bloque adicional.</p>}
               <button onClick={makeReservation} disabled={saving || !canBook} className="w-full bg-blue-600 text-white rounded-xl py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                 {saving ? 'Confirmando…' : '📅 Confirmar reserva'}
               </button>
@@ -260,7 +261,7 @@ const canBook = isSelectedSunday || isSelectedNight || remaining > 0 || isExtraB
                         {extraCost > 0 && <span className="ml-2 text-xs text-amber-600">+{fmt$(extraCost)}</span>}
                         {isPast && <span className="ml-2 text-xs text-slate-300">pasado</span>}
                       </div>
-                      {!isPast && <button onClick={() => cancelReservation(r.id)} className="text-xs text-slate-300 hover:text-red-400">✕</button>}
+                      {!isPast && <button onClick={() => cancelReservation(r.id, r.date)} className="text-xs text-slate-300 hover:text-red-400">✕</button>}
                     </div>
                   )
                 })}
