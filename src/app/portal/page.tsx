@@ -62,7 +62,7 @@ export default function PortalPage() {
     const res = await fetch('/api/reservations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ client_id: client.id, date, slot }),
+      body: JSON.stringify({ client_id: client.id, date, slot, is_extra: isExtraBlock }),
     })
     const json = await res.json()
     setSaving(false)
