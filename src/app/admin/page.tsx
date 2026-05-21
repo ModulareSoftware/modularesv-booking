@@ -566,13 +566,6 @@ export default function AdminPage() {
   <option value="por_cobrar">⏳ Por cobrar</option>
   <option value="cobrado">✓ Cobrado</option>
 </select>
-                                className={`px-2 py-0.5 rounded-full font-medium transition-all ${
-                                  r.chargeStatus === 'cobrado' ? 'bg-green-50 text-green-600 hover:bg-green-100' :
-                                  r.chargeStatus === 'por_cobrar' ? 'bg-orange-50 text-orange-600 hover:bg-orange-100' :
-                                  'bg-slate-100 text-slate-400'
-                                }`}>
-                                {r.chargeStatus === 'cobrado' ? '✓ Cobrado' : r.chargeStatus === 'por_cobrar' ? '⏳ Por cobrar' : '🔒 Programado'}
-                              </button>
                             </div>
                           ))}
                         </div>
@@ -604,13 +597,6 @@ export default function AdminPage() {
   <option value="por_cobrar">⏳ Por cobrar</option>
   <option value="cobrado">✓ Cobrado</option>
 </select>
-                                className={`px-2 py-0.5 rounded-full font-medium transition-all ${
-                                  r.chargeStatus === 'cobrado' ? 'bg-green-50 text-green-600 hover:bg-green-100' :
-                                  r.chargeStatus === 'por_cobrar' ? 'bg-orange-50 text-orange-600 hover:bg-orange-100' :
-                                  'bg-slate-100 text-slate-400'
-                                }`}>
-                                {r.chargeStatus === 'cobrado' ? '✓ Cobrado' : r.chargeStatus === 'por_cobrar' ? '⏳ Por cobrar' : '🔒 Programado'}
-                              </button>
                             </div>
                           ))}
                         </div>
