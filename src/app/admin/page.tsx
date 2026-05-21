@@ -37,6 +37,9 @@ export default function AdminPage() {
   const [showNewRes, setShowNewRes] = useState<{ date?: string; slot?: string } | null>(null)
   const [filterClient, setFilterClient] = useState('')
   const [billingClient, setBillingClient] = useState('')
+  const [billingMonth2, setBillingMonth2] = useState('')
+  const [billingYear, setBillingYear] = useState('')
+  const [billingVigency, setBillingVigency] = useState('')
   const [alert, setAlert] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null)
 
   useEffect(() => {
@@ -111,7 +114,7 @@ export default function AdminPage() {
 
   function getClientBilling(c: Client) {
     const pkg = PACKAGES[c.package]
-    const clientRes = reservations.filter(r => r.client_id === c.id)
+    const clientRes = billingReservations(c.id)
     const nights = clientRes.filter(r => r.slot === 'night' && !isSunday(r.date)).length
     const sundays = clientRes.filter(r => isSunday(r.date)).length
     const baseNeto = pkg.price
@@ -211,7 +214,20 @@ export default function AdminPage() {
   if (loading) return <div className="min-h-screen flex items-center justify-center text-slate-400">Cargando datos…</div>
 
   const { ref: monthRef, firstDay, daysInMonth } = getMonthDays()
-  const billingClients = billingClient ? clients.filter(c => c.id === billingClient) : clients
+  const billingClients = clients.filter(c => {
+    if (billingClient && c.id !== billingClient) return false
+    if (billingVigency === 'active' && daysLeft(c.start_date) <= 0) return false
+    if (billingVigency === 'expired' && daysLeft(c.start_date) > 0) return false
+    return true
+  })
+
+  const billingReservations = (clientId: string) => reservations.filter(r => {
+    if (r.client_id !== clientId) return false
+    const d = new Date(r.date + 'T12:00:00')
+    if (billingMonth2 !== '' && d.getMonth() !== parseInt(billingMonth2)) return false
+    if (billingYear !== '' && d.getFullYear() !== parseInt(billingYear)) return false
+    return true
+  })
   const totalNetoMes = billingClients.reduce((sum, c) => sum + getClientBilling(c).totalNeto, 0)
   const totalIvaMes = totalNetoMes * IVA
   const totalConIvaMes = totalNetoMes * (1 + IVA)
