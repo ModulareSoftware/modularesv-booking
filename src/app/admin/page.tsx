@@ -87,7 +87,10 @@ export default function AdminPage() {
   }
 
   const weekDays = getWeekDays()
-  const todayStr = fmtDate(new Date())
+  const todayStr = (() => {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+})()
 
   function getRes(dateStr: string, slot: string) {
     return reservations.find(r => r.date === dateStr && r.slot === slot)
