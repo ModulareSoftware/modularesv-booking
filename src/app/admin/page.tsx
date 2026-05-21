@@ -116,15 +116,20 @@ const [editingRes, setEditingRes] = useState<Reservation | null>(null)
     const clientRes = billingReservations(c.id)
     const nights = clientRes.filter(r => r.slot === 'night' && !isSunday(r.date)).length
     const sundays = clientRes.filter(r => isSunday(r.date)).length
+    const usedQuota = clientRes.filter(r => countsAgainstQuota(r.date, r.slot)).length
+    const extraBlocks = Math.max(0, usedQuota - pkg.blocks)
+    const extraBlockPrice = (c as any).extra_block_price || 25
     const baseNeto = pkg.price
     const nightNeto = nights * c.night_price
     const sundayNeto = sundays * (c.sunday_price || 25)
-    const totalNeto = baseNeto + nightNeto + sundayNeto
+    const extraBlockNeto = extraBlocks * extraBlockPrice
+    const totalNeto = baseNeto + nightNeto + sundayNeto + extraBlockNeto
     return {
-      baseNeto, nightNeto, sundayNeto, totalNeto,
+      baseNeto, nightNeto, sundayNeto, extraBlockNeto, totalNeto,
       baseIva: baseNeto * IVA, nightIva: nightNeto * IVA, sundayIva: sundayNeto * IVA,
+      extraBlockIva: extraBlockNeto * IVA,
       totalIva: totalNeto * IVA, totalConIva: totalNeto * (1 + IVA),
-      nights, sundays,
+      nights, sundays, extraBlocks, extraBlockPrice,
     }
   }
 
@@ -399,7 +404,10 @@ async function editReservation(id: string, date: string, slot: string) {
             {clients.length === 0 && <p className="text-slate-400 text-sm text-center py-8">Sin clientes.</p>}
             <div className="space-y-3">
               {clients.map(c => {
-                const { used, nights, sundays, total, remaining } = getClientUsage(c)
+                const { used, nights, sundays, total, remaining: rawRemaining } = getClientUsage(c)
+const remaining = Math.max(0, rawRemaining)
+const extraBlocksCount = rawRemaining < 0 ? Math.abs(rawRemaining) : 0
+const extraBlockPrice = (c as any).extra_block_price || 25
                 const pct = Math.round((used / total) * 100)
                 const dl = daysLeft(c.start_date)
                 const end = getVigencyEnd(c.start_date)
@@ -421,6 +429,7 @@ async function editReservation(id: string, date: string, slot: string) {
                         <span>{used}/{total} bloques · vence {end.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
                         {nights > 0 && <span>· {nights} noches</span>}
                         {sundays > 0 && <span>· {sundays} domingos</span>}
+                        {extraBlocksCount > 0 && <span>· {extraBlocksCount} bloques extra</span>}
                         {c.deposit_amount > 0 && (
                           <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${depStatus.color}`}>
                             Depósito {fmt$(c.deposit_amount)} · {depStatus.label}
@@ -638,7 +647,20 @@ async function editReservation(id: string, date: string, slot: string) {
                         </div>
                       </div>
                     )}
-
+{/* Bloques extra */}
+{b.extraBlocks > 0 && (
+  <div className="border-b border-slate-50">
+    <div className="grid grid-cols-5 px-3 py-2 text-sm items-start">
+      <div className="col-span-2">
+        <span className="text-slate-600">Bloques extra</span>
+        <span className="text-xs text-slate-400 block">{b.extraBlocks} × {fmt$(b.extraBlockPrice)}</span>
+      </div>
+      <span className="text-right text-slate-600">{fmt$(b.extraBlockNeto)}</span>
+      <span className="text-right text-slate-400">{fmt$(b.extraBlockIva)}</span>
+      <span className="text-right font-medium">{fmt$(b.extraBlockNeto + b.extraBlockIva)}</span>
+    </div>
+  </div>
+)}
                     {/* Botón marcar todos */}
                     {pendingExtras > 0 && (
                       <div className="px-3 py-2 bg-orange-50 border-b border-slate-50 flex items-center justify-between">
