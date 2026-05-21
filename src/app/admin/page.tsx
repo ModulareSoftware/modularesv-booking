@@ -659,6 +659,22 @@ const extraBlockPrice = (c as any).extra_block_price || 25
       <span className="text-right text-slate-400">{fmt$(b.extraBlockIva)}</span>
       <span className="text-right font-medium">{fmt$(b.extraBlockNeto + b.extraBlockIva)}</span>
     </div>
+    <div className="px-3 pb-2 space-y-1">
+      {billingReservations(c.id).filter(r => countsAgainstQuota(r.date, r.slot)).slice(PACKAGES[c.package].blocks).map(r => (
+        <div key={r.id} className="flex items-center gap-2 text-xs">
+          <span className="text-slate-400">{new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit' })}</span>
+          <span className="flex-1" />
+          <select
+            value={(r as any).charge_status || 'programado'}
+            onChange={e => markChargeStatus(r.id, e.target.value)}
+            className="text-xs border border-slate-200 rounded-lg px-2 py-0.5 bg-white cursor-pointer">
+            <option value="programado">🔒 Programado</option>
+            <option value="por_cobrar">⏳ Por cobrar</option>
+            <option value="cobrado">✓ Cobrado</option>
+          </select>
+        </div>
+      ))}
+    </div>
   </div>
 )}
                     {/* Botón marcar todos */}
