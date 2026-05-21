@@ -13,12 +13,22 @@ function authHeaders() {
   return { 'Content-Type': 'application/json', 'x-admin-secret': ADMIN_SECRET }
 }
 
+interface BillingMonth {
+  id: string
+  client_id: string
+  month_start: string
+  month_end: string
+  package_status: 'pendiente' | 'pagado'
+  package_paid_at: string | null
+}
+
 export default function AdminPage() {
   const router = useRouter()
   const [tab, setTab] = useState<'calendar' | 'clients' | 'reservations' | 'billing'>('calendar')
   const [calView, setCalView] = useState<'week' | 'month'>('week')
   const [clients, setClients] = useState<Client[]>([])
   const [reservations, setReservations] = useState<Reservation[]>([])
+  const [billingMonths, setBillingMonths] = useState<BillingMonth[]>([])
   const [weekOffset, setWeekOffset] = useState(0)
   const [monthOffset, setMonthOffset] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -43,9 +53,14 @@ export default function AdminPage() {
   }
 
   const loadData = useCallback(async () => {
-    const [cRes, rRes] = await Promise.all([fetch('/api/clients'), fetch('/api/reservations')])
+    const [cRes, rRes, bRes] = await Promise.all([
+      fetch('/api/clients'),
+      fetch('/api/reservations'),
+      fetch('/api/billing'),
+    ])
     setClients(await cRes.json())
     setReservations(await rRes.json())
+    setBillingMonths(await bRes.json())
     setLoading(false)
   }, [])
 
@@ -106,6 +121,67 @@ export default function AdminPage() {
       totalIva: totalNeto * IVA, totalConIva: totalNeto * (1 + IVA),
       nights, sundays,
     }
+  }
+
+  function getExtraReservations(c: Client) {
+    const now = new Date()
+    return reservations
+      .filter(r => r.client_id === c.id && (r.slot === 'night' || isSunday(r.date)))
+      .map(r => {
+        const resDate = new Date(r.date + 'T23:59:00')
+        const slotEnd = r.slot === 'night' ? new Date(r.date + 'T21:00:00') : new Date(r.date + 'T23:59:00')
+        let chargeStatus = (r as any).charge_status || 'programado'
+        if (chargeStatus === 'programado' && slotEnd < now) chargeStatus = 'por_cobrar'
+        return { ...r, chargeStatus }
+      })
+      .sort((a, b) => a.date.localeCompare(b.date))
+  }
+
+  function getCurrentBillingMonth(c: Client) {
+    return billingMonths.find(b => b.client_id === c.id &&
+      new Date(b.month_start + 'T00:00:00') <= new Date() &&
+      new Date(b.month_end + 'T23:59:59') >= new Date()
+    )
+  }
+
+  async function togglePackageStatus(c: Client) {
+    const current = getCurrentBillingMonth(c)
+    const start = new Date(c.start_date)
+    const end = getVigencyEnd(c.start_date)
+    const newStatus = current?.package_status === 'pagado' ? 'pendiente' : 'pagado'
+
+    await fetch('/api/billing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: c.id,
+        month_start: fmtDate(start),
+        month_end: fmtDate(end),
+        package_status: newStatus,
+      }),
+    })
+    loadData()
+  }
+
+  async function markChargeStatus(reservationId: string, status: string) {
+    await fetch(`/api/reservations/${reservationId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ charge_status: status }),
+    })
+    loadData()
+  }
+
+  async function markAllExtras(c: Client, status: string) {
+    const extras = getExtraReservations(c).filter(r => r.chargeStatus !== 'programado')
+    await Promise.all(extras.map(r =>
+      fetch(`/api/reservations/${r.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ charge_status: status }),
+      })
+    ))
+    loadData()
   }
 
   async function deleteReservation(id: string) {
@@ -416,6 +492,11 @@ export default function AdminPage() {
               const dl = daysLeft(c.start_date)
               const end = getVigencyEnd(c.start_date)
               const depStatus = DEPOSIT_STATUS[c.deposit_status]
+              const billingMonth = getCurrentBillingMonth(c)
+              const pkgStatus = billingMonth?.package_status || 'pendiente'
+              const extraRes = getExtraReservations(c)
+              const pendingExtras = extraRes.filter(r => r.chargeStatus === 'por_cobrar').length
+
               return (
                 <div key={c.id} className="bg-white rounded-2xl border border-slate-200 p-4">
                   <div className="flex items-center gap-3 mb-4">
@@ -433,44 +514,113 @@ export default function AdminPage() {
                     </div>
                   </div>
 
+                  {/* Desglose */}
                   <div className="border border-slate-100 rounded-xl overflow-hidden mb-3">
-                    <div className="grid grid-cols-4 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-400 border-b border-slate-100">
-                      <span>Concepto</span>
+                    <div className="grid grid-cols-5 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-400 border-b border-slate-100">
+                      <span className="col-span-2">Concepto</span>
                       <span className="text-right">Neto</span>
                       <span className="text-right">IVA 13%</span>
                       <span className="text-right">Total</span>
                     </div>
-                    <div className="grid grid-cols-4 px-3 py-2.5 text-sm border-b border-slate-50">
-                      <span className="text-slate-600">Paquete {pkg.label}<span className="text-xs text-slate-400 block">{pkg.blocks} bloques</span></span>
+
+                    {/* Paquete con estado de pago */}
+                    <div className="grid grid-cols-5 px-3 py-2.5 text-sm border-b border-slate-50 items-center">
+                      <div className="col-span-2">
+                        <span className="text-slate-600">Paquete {pkg.label}</span>
+                        <span className="text-xs text-slate-400 block">{pkg.blocks} bloques</span>
+                        <button onClick={() => togglePackageStatus(c)}
+                          className={`mt-1 text-xs px-2 py-0.5 rounded-full font-medium cursor-pointer transition-all ${pkgStatus === 'pagado' ? 'bg-green-50 text-green-600 hover:bg-green-100' : 'bg-amber-50 text-amber-600 hover:bg-amber-100'}`}>
+                          {pkgStatus === 'pagado' ? '✓ Pagado' : '⏳ Pendiente'} — clic para cambiar
+                        </button>
+                      </div>
                       <span className="text-right text-slate-600">{fmt$(b.baseNeto)}</span>
                       <span className="text-right text-slate-400">{fmt$(b.baseIva)}</span>
                       <span className="text-right font-medium">{fmt$(b.baseNeto + b.baseIva)}</span>
                     </div>
-                    {b.nights > 0 && (
-                      <div className="grid grid-cols-4 px-3 py-2.5 text-sm border-b border-slate-50">
-                        <span className="text-slate-600">Noches extra<span className="text-xs text-slate-400 block">{b.nights} × {fmt$(c.night_price)}</span></span>
-                        <span className="text-right text-slate-600">{fmt$(b.nightNeto)}</span>
-                        <span className="text-right text-slate-400">{fmt$(b.nightIva)}</span>
-                        <span className="text-right font-medium">{fmt$(b.nightNeto + b.nightIva)}</span>
+
+                    {/* Noches extra con estado individual */}
+                    {extraRes.filter(r => r.slot === 'night' && !isSunday(r.date)).length > 0 && (
+                      <div className="border-b border-slate-50">
+                        <div className="grid grid-cols-5 px-3 py-2 text-sm items-start">
+                          <div className="col-span-2">
+                            <span className="text-slate-600">Noches extra</span>
+                            <span className="text-xs text-slate-400 block">{extraRes.filter(r => r.slot === 'night' && !isSunday(r.date)).length} × {fmt$(c.night_price)}</span>
+                          </div>
+                          <span className="text-right text-slate-600">{fmt$(b.nightNeto)}</span>
+                          <span className="text-right text-slate-400">{fmt$(b.nightIva)}</span>
+                          <span className="text-right font-medium">{fmt$(b.nightNeto + b.nightIva)}</span>
+                        </div>
+                        <div className="px-3 pb-2 space-y-1">
+                          {extraRes.filter(r => r.slot === 'night' && !isSunday(r.date)).map(r => (
+                            <div key={r.id} className="flex items-center gap-2 text-xs">
+                              <span className="text-slate-400">{new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit' })}</span>
+                              <span className="flex-1" />
+                              <button onClick={() => markChargeStatus(r.id, r.chargeStatus === 'cobrado' ? 'por_cobrar' : 'cobrado')}
+                                className={`px-2 py-0.5 rounded-full font-medium transition-all ${
+                                  r.chargeStatus === 'cobrado' ? 'bg-green-50 text-green-600 hover:bg-green-100' :
+                                  r.chargeStatus === 'por_cobrar' ? 'bg-orange-50 text-orange-600 hover:bg-orange-100' :
+                                  'bg-slate-100 text-slate-400'
+                                }`}>
+                                {r.chargeStatus === 'cobrado' ? '✓ Cobrado' : r.chargeStatus === 'por_cobrar' ? '⏳ Por cobrar' : '🔒 Programado'}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
-                    {b.sundays > 0 && (
-                      <div className="grid grid-cols-4 px-3 py-2.5 text-sm border-b border-slate-50">
-                        <span className="text-slate-600">Domingos<span className="text-xs text-slate-400 block">{b.sundays} × {fmt$(c.sunday_price || 25)}</span></span>
-                        <span className="text-right text-slate-600">{fmt$(b.sundayNeto)}</span>
-                        <span className="text-right text-slate-400">{fmt$(b.sundayIva)}</span>
-                        <span className="text-right font-medium">{fmt$(b.sundayNeto + b.sundayIva)}</span>
+
+                    {/* Domingos con estado individual */}
+                    {extraRes.filter(r => isSunday(r.date)).length > 0 && (
+                      <div className="border-b border-slate-50">
+                        <div className="grid grid-cols-5 px-3 py-2 text-sm items-start">
+                          <div className="col-span-2">
+                            <span className="text-slate-600">Domingos</span>
+                            <span className="text-xs text-slate-400 block">{extraRes.filter(r => isSunday(r.date)).length} × {fmt$(c.sunday_price || 25)}</span>
+                          </div>
+                          <span className="text-right text-slate-600">{fmt$(b.sundayNeto)}</span>
+                          <span className="text-right text-slate-400">{fmt$(b.sundayIva)}</span>
+                          <span className="text-right font-medium">{fmt$(b.sundayNeto + b.sundayIva)}</span>
+                        </div>
+                        <div className="px-3 pb-2 space-y-1">
+                          {extraRes.filter(r => isSunday(r.date)).map(r => (
+                            <div key={r.id} className="flex items-center gap-2 text-xs">
+                              <span className="text-slate-400">{new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit' })}</span>
+                              <span className="flex-1" />
+                              <button onClick={() => markChargeStatus(r.id, r.chargeStatus === 'cobrado' ? 'por_cobrar' : 'cobrado')}
+                                className={`px-2 py-0.5 rounded-full font-medium transition-all ${
+                                  r.chargeStatus === 'cobrado' ? 'bg-green-50 text-green-600 hover:bg-green-100' :
+                                  r.chargeStatus === 'por_cobrar' ? 'bg-orange-50 text-orange-600 hover:bg-orange-100' :
+                                  'bg-slate-100 text-slate-400'
+                                }`}>
+                                {r.chargeStatus === 'cobrado' ? '✓ Cobrado' : r.chargeStatus === 'por_cobrar' ? '⏳ Por cobrar' : '🔒 Programado'}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
-                    <div className="grid grid-cols-4 px-3 py-2.5 text-sm bg-slate-50 font-semibold">
-                      <span className="text-slate-700">Total</span>
+
+                    {/* Botón marcar todos */}
+                    {pendingExtras > 0 && (
+                      <div className="px-3 py-2 bg-orange-50 border-b border-slate-50 flex items-center justify-between">
+                        <span className="text-xs text-orange-600">{pendingExtras} extra{pendingExtras > 1 ? 's' : ''} por cobrar</span>
+                        <button onClick={() => markAllExtras(c, 'cobrado')}
+                          className="text-xs bg-orange-500 text-white px-3 py-1 rounded-lg hover:bg-orange-600 transition-colors">
+                          Marcar todos como cobrados
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Total */}
+                    <div className="grid grid-cols-5 px-3 py-2.5 text-sm bg-slate-50 font-semibold">
+                      <span className="col-span-2 text-slate-700">Total</span>
                       <span className="text-right text-slate-700">{fmt$(b.totalNeto)}</span>
                       <span className="text-right text-slate-500">{fmt$(b.totalIva)}</span>
                       <span className="text-right text-blue-600">{fmt$(b.totalConIva)}</span>
                     </div>
                   </div>
 
-                  {/* Deposit info */}
+                  {/* Depósito */}
                   {c.deposit_amount > 0 && (
                     <div className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border text-sm ${
                       c.deposit_status === 'pagado' ? 'border-green-100 bg-green-50' :
@@ -588,8 +738,6 @@ function NewClientModal({ onClose, onSave }: { onClose: () => void; onSave: (d: 
           <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.sunday_price} onChange={e => set('sunday_price', parseFloat(e.target.value))} />
         </div>
       </div>
-
-      {/* Deposit section */}
       <div className="border border-slate-100 rounded-xl p-3 mb-4 bg-slate-50">
         <p className="text-xs font-medium text-slate-600 mb-2">🔒 Depósito de garantía</p>
         <p className="text-xs text-slate-400 mb-3">50% del paquete sugerido: <strong>{fmt$(suggestedDeposit)}</strong></p>
@@ -613,7 +761,6 @@ function NewClientModal({ onClose, onSave }: { onClose: () => void; onSave: (d: 
           <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" value={form.deposit_date} onChange={e => set('deposit_date', e.target.value)} />
         </div>
       </div>
-
       <div className="flex gap-2 justify-end">
         <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg hover:bg-slate-100">Cancelar</button>
         <button onClick={() => onSave(form)} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Registrar</button>
@@ -696,8 +843,6 @@ function EditClientModal({ client, onClose, onSave }: { client: Client; onClose:
           <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.sunday_price} onChange={e => set('sunday_price', parseFloat(e.target.value))} />
         </div>
       </div>
-
-      {/* Deposit section */}
       <div className="border border-slate-100 rounded-xl p-3 mb-4 bg-slate-50">
         <p className="text-xs font-medium text-slate-600 mb-3">🔒 Depósito de garantía</p>
         <div className="grid grid-cols-2 gap-3 mb-2">
@@ -720,7 +865,6 @@ function EditClientModal({ client, onClose, onSave }: { client: Client; onClose:
           <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" value={form.deposit_date} onChange={e => set('deposit_date', e.target.value)} />
         </div>
       </div>
-
       <div className="flex gap-2 justify-end">
         <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg hover:bg-slate-100">Cancelar</button>
         <button onClick={() => onSave(form)} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Guardar cambios</button>
