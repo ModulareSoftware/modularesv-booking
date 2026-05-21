@@ -7,14 +7,17 @@ const ADMIN_SECRET = 'Modular2024!'
 const DAYS_ES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 const DAYS_ES_SHORT = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 const MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+const IVA = 0.13
 
 function authHeaders() {
   return { 'Content-Type': 'application/json', 'x-admin-secret': ADMIN_SECRET }
 }
 
+function fmt$(n: number) { return `$${n.toFixed(2)}` }
+
 export default function AdminPage() {
   const router = useRouter()
-  const [tab, setTab] = useState<'calendar' | 'clients' | 'reservations'>('calendar')
+  const [tab, setTab] = useState<'calendar' | 'clients' | 'reservations' | 'billing'>('calendar')
   const [calView, setCalView] = useState<'week' | 'month'>('week')
   const [clients, setClients] = useState<Client[]>([])
   const [reservations, setReservations] = useState<Reservation[]>([])
@@ -25,6 +28,7 @@ export default function AdminPage() {
   const [editingClient, setEditingClient] = useState<Client | null>(null)
   const [showNewRes, setShowNewRes] = useState<{ date?: string; slot?: string } | null>(null)
   const [filterClient, setFilterClient] = useState('')
+  const [billingClient, setBillingClient] = useState('')
   const [alert, setAlert] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null)
 
   useEffect(() => {
@@ -89,6 +93,28 @@ export default function AdminPage() {
     return { used, nights, sundays, total, remaining: total - used }
   }
 
+  function getClientBilling(c: Client) {
+    const pkg = PACKAGES[c.package]
+    const clientRes = reservations.filter(r => r.client_id === c.id)
+    const nights = clientRes.filter(r => r.slot === 'night' && !isSunday(r.date)).length
+    const sundays = clientRes.filter(r => isSunday(r.date)).length
+
+    const baseNeto = pkg.price
+    const nightNeto = nights * c.night_price
+    const sundayNeto = sundays * (c.sunday_price || 25)
+    const totalNeto = baseNeto + nightNeto + sundayNeto
+
+    return {
+      baseNeto, nightNeto, sundayNeto, totalNeto,
+      baseIva: baseNeto * IVA,
+      nightIva: nightNeto * IVA,
+      sundayIva: sundayNeto * IVA,
+      totalIva: totalNeto * IVA,
+      totalConIva: totalNeto * (1 + IVA),
+      nights, sundays,
+    }
+  }
+
   async function deleteReservation(id: string) {
     if (!confirm('¿Cancelar esta reserva?')) return
     await fetch(`/api/reservations/${id}`, { method: 'DELETE', headers: authHeaders() })
@@ -106,26 +132,29 @@ export default function AdminPage() {
     afternoon: 'bg-green-50 border-green-300 text-green-800',
     night:     'bg-amber-50 border-amber-300 text-amber-800',
   }
-
   const slotDots: Record<string, string> = {
-    morning: 'bg-blue-400',
-    afternoon: 'bg-green-400',
-    night: 'bg-amber-400',
+    morning: 'bg-blue-400', afternoon: 'bg-green-400', night: 'bg-amber-400',
   }
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-slate-400">Cargando datos…</div>
 
   const { ref: monthRef, firstDay, daysInMonth } = getMonthDays()
 
+  // Billing totals
+  const billingClients = billingClient ? clients.filter(c => c.id === billingClient) : clients
+  const totalNetoMes = billingClients.reduce((sum, c) => sum + getClientBilling(c).totalNeto, 0)
+  const totalIvaMes = totalNetoMes * IVA
+  const totalConIvaMes = totalNetoMes * (1 + IVA)
+
   return (
     <div className="min-h-screen bg-slate-50">
       <nav className="bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3 flex-wrap">
         <span className="font-semibold text-slate-800 mr-auto" style={{ fontFamily: 'Fraunces, serif' }}>Modulare Flex Office</span>
         <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full">Admin</span>
-        {(['calendar', 'clients', 'reservations'] as const).map(t => (
+        {(['calendar', 'clients', 'reservations', 'billing'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`text-sm px-3 py-1.5 rounded-lg transition-all ${tab === t ? 'bg-slate-100 font-medium' : 'text-slate-500 hover:text-slate-700'}`}>
-            {t === 'calendar' ? '📅 Calendario' : t === 'clients' ? '👥 Clientes' : '📋 Reservas'}
+            {t === 'calendar' ? '📅 Calendario' : t === 'clients' ? '👥 Clientes' : t === 'reservations' ? '📋 Reservas' : '💰 Facturación'}
           </button>
         ))}
         <button onClick={() => setShowNewClient(true)} className="bg-blue-600 text-white text-sm px-3 py-1.5 rounded-lg hover:bg-blue-700">+ Cliente</button>
@@ -139,24 +168,19 @@ export default function AdminPage() {
       )}
 
       <div className="p-4 max-w-6xl mx-auto">
+
+        {/* ── CALENDAR ── */}
         {tab === 'calendar' && (
           <div className="bg-white rounded-2xl border border-slate-200 p-4">
             <div className="flex items-center gap-2 mb-4 flex-wrap">
               <h2 className="font-semibold text-slate-700 mr-auto">
                 {calView === 'week'
                   ? `${weekDays[0].toLocaleDateString('es-SV', { day: 'numeric', month: 'short' })} – ${weekDays[6].toLocaleDateString('es-SV', { day: 'numeric', month: 'short', year: 'numeric' })}`
-                  : `${MONTHS_ES[monthRef.getMonth()]} ${monthRef.getFullYear()}`
-                }
+                  : `${MONTHS_ES[monthRef.getMonth()]} ${monthRef.getFullYear()}`}
               </h2>
               <div className="flex bg-slate-100 rounded-lg p-0.5 gap-0.5">
-                <button onClick={() => setCalView('week')}
-                  className={`text-xs px-3 py-1.5 rounded-md transition-all ${calView === 'week' ? 'bg-white shadow-sm font-medium' : 'text-slate-500'}`}>
-                  Semana
-                </button>
-                <button onClick={() => setCalView('month')}
-                  className={`text-xs px-3 py-1.5 rounded-md transition-all ${calView === 'month' ? 'bg-white shadow-sm font-medium' : 'text-slate-500'}`}>
-                  Mes
-                </button>
+                <button onClick={() => setCalView('week')} className={`text-xs px-3 py-1.5 rounded-md transition-all ${calView === 'week' ? 'bg-white shadow-sm font-medium' : 'text-slate-500'}`}>Semana</button>
+                <button onClick={() => setCalView('month')} className={`text-xs px-3 py-1.5 rounded-md transition-all ${calView === 'month' ? 'bg-white shadow-sm font-medium' : 'text-slate-500'}`}>Mes</button>
               </div>
               {calView === 'week' ? (
                 <>
@@ -202,11 +226,8 @@ export default function AdminPage() {
                             onClick={() => res ? deleteReservation(res.id) : setShowNewRes({ date: dateStr, slot })}
                             className={`min-h-12 rounded-xl border cursor-pointer transition-all flex flex-col items-center justify-center text-center p-1
                               ${res ? slotColors[slot] : isDom ? 'border-purple-100 bg-purple-50 hover:border-purple-300' : 'border-slate-100 bg-slate-50 hover:border-blue-300 hover:bg-blue-50'}`}
-                            title={res ? `${client ? displayName(client) : ''} — clic para cancelar` : isDom ? 'Domingo (extra)' : 'Clic para reservar'}>
-                            {client
-                              ? <span className="text-xs font-medium leading-tight">{displayName(client).split(' ')[0]}</span>
-                              : <span className={`text-lg ${isDom ? 'text-purple-200' : 'text-slate-200'}`}>+</span>
-                            }
+                            title={res ? `${client ? displayName(client) : ''} — clic para cancelar` : ''}>
+                            {client ? <span className="text-xs font-medium leading-tight">{displayName(client).split(' ')[0]}</span> : <span className={`text-lg ${isDom ? 'text-purple-200' : 'text-slate-200'}`}>+</span>}
                           </div>
                         )
                       })}
@@ -239,8 +260,7 @@ export default function AdminPage() {
                     const isToday = dateStr === todayStr
                     const isDom = new Date(dateStr + 'T12:00:00').getDay() === 0
                     return (
-                      <div key={dateStr}
-                        onClick={() => setShowNewRes({ date: dateStr })}
+                      <div key={dateStr} onClick={() => setShowNewRes({ date: dateStr })}
                         className={`min-h-16 rounded-xl border p-1.5 transition-all cursor-pointer
                           ${isToday ? 'border-blue-300 bg-blue-50' : isDom ? 'border-purple-100 bg-purple-50 hover:border-purple-300' : 'border-slate-100 hover:border-slate-300'}`}>
                         <div className={`text-xs font-semibold mb-1 ${isToday ? 'text-blue-600' : isDom ? 'text-purple-500' : 'text-slate-500'}`}>{day}</div>
@@ -248,11 +268,9 @@ export default function AdminPage() {
                           {dayRes.map(r => {
                             const c = clients.find(x => x.id === r.client_id)
                             return (
-                              <div key={r.id}
-                                onClick={e => { e.stopPropagation(); deleteReservation(r.id) }}
+                              <div key={r.id} onClick={e => { e.stopPropagation(); deleteReservation(r.id) }}
                                 className={`flex items-center gap-1 px-1 py-0.5 rounded text-xs cursor-pointer hover:opacity-75
-                                  ${r.slot === 'morning' ? 'bg-blue-100 text-blue-700' : r.slot === 'afternoon' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}
-                                title={`${c ? displayName(c) : ''} · ${SLOTS[r.slot as keyof typeof SLOTS].label} — clic para cancelar`}>
+                                  ${r.slot === 'morning' ? 'bg-blue-100 text-blue-700' : r.slot === 'afternoon' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
                                 <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${slotDots[r.slot]}`} />
                                 <span className="truncate">{c ? displayName(c).split(' ')[0] : ''}</span>
                               </div>
@@ -275,18 +293,17 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* ── CLIENTS ── */}
         {tab === 'clients' && (
           <div className="bg-white rounded-2xl border border-slate-200 p-4">
             <h2 className="font-semibold text-slate-700 mb-4">Clientes registrados</h2>
-            {clients.length === 0 && <p className="text-slate-400 text-sm text-center py-8">Sin clientes. Agrega uno con "+ Cliente"</p>}
+            {clients.length === 0 && <p className="text-slate-400 text-sm text-center py-8">Sin clientes.</p>}
             <div className="space-y-3">
               {clients.map(c => {
                 const { used, nights, sundays, total, remaining } = getClientUsage(c)
                 const pct = Math.round((used / total) * 100)
                 const dl = daysLeft(c.start_date)
                 const end = getVigencyEnd(c.start_date)
-                const nightCost = nights * c.night_price
-                const sundayCost = sundays * (c.sunday_price || 25)
                 const pkg = PACKAGES[c.package]
                 return (
                   <div key={c.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:border-slate-200">
@@ -298,12 +315,12 @@ export default function AdminPage() {
                         <span className="font-medium text-sm">{displayName(c)}</span>
                         {c.company_name && <span className="text-xs text-slate-400">({c.name})</span>}
                         <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">{pkg.label}</span>
-                        {dl <= 5 && <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">⚠️ {dl}d restantes</span>}
+                        {dl <= 5 && <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">⚠️ {dl}d</span>}
                       </div>
                       <div className="text-xs text-slate-400 mt-0.5">
                         {used}/{total} bloques · vence {end.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-                        {nights > 0 && ` · ${nights} noches ($${nightCost})`}
-                        {sundays > 0 && ` · ${sundays} domingos ($${sundayCost})`}
+                        {nights > 0 && ` · ${nights} noches`}
+                        {sundays > 0 && ` · ${sundays} domingos`}
                       </div>
                       <div className="mt-1.5 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                         <div className={`h-full rounded-full ${pct >= 100 ? 'bg-red-400' : pct >= 75 ? 'bg-amber-400' : 'bg-blue-400'}`} style={{ width: `${pct}%` }} />
@@ -325,6 +342,7 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* ── RESERVATIONS ── */}
         {tab === 'reservations' && (
           <div className="bg-white rounded-2xl border border-slate-200 p-4">
             <div className="flex items-center gap-3 mb-4 flex-wrap">
@@ -350,8 +368,8 @@ export default function AdminPage() {
                         <div className="flex-1 text-sm">
                           <span className="font-medium">{c ? displayName(c) : '?'}</span>
                           <span className="text-slate-400"> · {new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })} · {slot.label}</span>
-                          {isDom && <span className="ml-1 text-xs text-purple-600">🗓️ dom +${c?.sunday_price || 25}</span>}
-                          {r.slot === 'night' && !isDom && <span className="ml-2 text-xs bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">+${c?.night_price}/noche</span>}
+                          {isDom && <span className="ml-1 text-xs text-purple-600">🗓️ dom</span>}
+                          {r.slot === 'night' && !isDom && <span className="ml-2 text-xs bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">noche</span>}
                         </div>
                         <button onClick={() => deleteReservation(r.id)} className="text-xs text-slate-300 hover:text-red-400">✕</button>
                       </div>
@@ -362,13 +380,139 @@ export default function AdminPage() {
             })()}
           </div>
         )}
+
+        {/* ── BILLING ── */}
+        {tab === 'billing' && (
+          <div className="space-y-4">
+            {/* Header & filter */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-4">
+              <div className="flex items-center gap-3 flex-wrap">
+                <div>
+                  <h2 className="font-semibold text-slate-700">Facturación del mes en curso</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Basado en reservas activas de cada cliente · IVA 13%</p>
+                </div>
+                <div className="ml-auto">
+                  <select value={billingClient} onChange={e => setBillingClient(e.target.value)}
+                    className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
+                    <option value="">Todos los clientes</option>
+                    {clients.map(c => <option key={c.id} value={c.id}>{displayName(c)}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Summary metrics */}
+              <div className="grid grid-cols-3 gap-3 mt-4">
+                <div className="bg-slate-50 rounded-xl p-3">
+                  <div className="text-xs text-slate-400 mb-1">Total neto</div>
+                  <div className="text-2xl font-semibold text-slate-700">{fmt$(totalNetoMes)}</div>
+                </div>
+                <div className="bg-slate-50 rounded-xl p-3">
+                  <div className="text-xs text-slate-400 mb-1">IVA (13%)</div>
+                  <div className="text-2xl font-semibold text-slate-500">{fmt$(totalIvaMes)}</div>
+                </div>
+                <div className="bg-blue-600 rounded-xl p-3">
+                  <div className="text-xs text-blue-200 mb-1">Total con IVA</div>
+                  <div className="text-2xl font-semibold text-white">{fmt$(totalConIvaMes)}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Per-client breakdown */}
+            {billingClients.map(c => {
+              const b = getClientBilling(c)
+              const pkg = PACKAGES[c.package]
+              const dl = daysLeft(c.start_date)
+              const end = getVigencyEnd(c.start_date)
+              return (
+                <div key={c.id} className="bg-white rounded-2xl border border-slate-200 p-4">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-semibold flex-shrink-0">
+                      {displayName(c).split(' ').map((x: string) => x[0]).slice(0, 2).join('')}
+                    </div>
+                    <div>
+                      <div className="font-semibold text-sm">{displayName(c)}</div>
+                      {c.company_name && <div className="text-xs text-slate-400">{c.name}</div>}
+                      <div className="text-xs text-slate-400">Vigencia hasta {end.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })} · {dl}d restantes</div>
+                    </div>
+                    <div className="ml-auto text-right">
+                      <div className="text-xs text-slate-400">Total con IVA</div>
+                      <div className="text-xl font-semibold text-blue-600">{fmt$(b.totalConIva)}</div>
+                    </div>
+                  </div>
+
+                  {/* Desglose */}
+                  <div className="border border-slate-100 rounded-xl overflow-hidden">
+                    {/* Header */}
+                    <div className="grid grid-cols-4 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-400 border-b border-slate-100">
+                      <span>Concepto</span>
+                      <span className="text-right">Neto</span>
+                      <span className="text-right">IVA 13%</span>
+                      <span className="text-right">Total</span>
+                    </div>
+
+                    {/* Paquete base */}
+                    <div className="grid grid-cols-4 px-3 py-2.5 text-sm border-b border-slate-50">
+                      <span className="text-slate-600">
+                        Paquete {pkg.label}
+                        <span className="text-xs text-slate-400 block">{pkg.blocks} bloques</span>
+                      </span>
+                      <span className="text-right text-slate-600">{fmt$(b.baseNeto)}</span>
+                      <span className="text-right text-slate-400">{fmt$(b.baseIva)}</span>
+                      <span className="text-right font-medium">{fmt$(b.baseNeto + b.baseIva)}</span>
+                    </div>
+
+                    {/* Noches extra */}
+                    {b.nights > 0 && (
+                      <div className="grid grid-cols-4 px-3 py-2.5 text-sm border-b border-slate-50">
+                        <span className="text-slate-600">
+                          Noches extra
+                          <span className="text-xs text-slate-400 block">{b.nights} × {fmt$(c.night_price)}</span>
+                        </span>
+                        <span className="text-right text-slate-600">{fmt$(b.nightNeto)}</span>
+                        <span className="text-right text-slate-400">{fmt$(b.nightIva)}</span>
+                        <span className="text-right font-medium">{fmt$(b.nightNeto + b.nightIva)}</span>
+                      </div>
+                    )}
+
+                    {/* Domingos */}
+                    {b.sundays > 0 && (
+                      <div className="grid grid-cols-4 px-3 py-2.5 text-sm border-b border-slate-50">
+                        <span className="text-slate-600">
+                          Domingos
+                          <span className="text-xs text-slate-400 block">{b.sundays} × {fmt$(c.sunday_price || 25)}</span>
+                        </span>
+                        <span className="text-right text-slate-600">{fmt$(b.sundayNeto)}</span>
+                        <span className="text-right text-slate-400">{fmt$(b.sundayIva)}</span>
+                        <span className="text-right font-medium">{fmt$(b.sundayNeto + b.sundayIva)}</span>
+                      </div>
+                    )}
+
+                    {/* Total row */}
+                    <div className="grid grid-cols-4 px-3 py-2.5 text-sm bg-slate-50 font-semibold">
+                      <span className="text-slate-700">Total</span>
+                      <span className="text-right text-slate-700">{fmt$(b.totalNeto)}</span>
+                      <span className="text-right text-slate-500">{fmt$(b.totalIva)}</span>
+                      <span className="text-right text-blue-600">{fmt$(b.totalConIva)}</span>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+
+            {billingClients.length === 0 && (
+              <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-400 text-sm">
+                Sin clientes registrados
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {showNewClient && <NewClientModal onClose={() => setShowNewClient(false)} onSave={async (data) => {
         const res = await fetch('/api/clients/create', { method: 'POST', headers: authHeaders(), body: JSON.stringify(data) })
         const json = await res.json()
         if (!res.ok) { setAlert({ type: 'err', msg: json.error }); return }
-        setAlert({ type: 'ok', msg: `✅ Cliente "${displayName(json)}" registrado. Ya puede ingresar al portal.` })
+        setAlert({ type: 'ok', msg: `✅ Cliente "${displayName(json)}" registrado.` })
         setShowNewClient(false); loadData()
       }} />}
 
@@ -376,7 +520,7 @@ export default function AdminPage() {
         const res = await fetch('/api/clients/create', { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ id: editingClient.id, ...data }) })
         const json = await res.json()
         if (!res.ok) { setAlert({ type: 'err', msg: json.error }); return }
-        setAlert({ type: 'ok', msg: `✅ Cliente "${displayName(json)}" actualizado.` })
+        setAlert({ type: 'ok', msg: `✅ Cliente actualizado.` })
         setEditingClient(null); loadData()
       }} />}
 
@@ -404,7 +548,6 @@ function NewClientModal({ onClose, onSave }: { onClose: () => void; onSave: (d: 
     const pwd = Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
     set('password', pwd); setCopied(false)
   }
-
   function copyPassword() {
     navigator.clipboard.writeText(form.password)
     setCopied(true); setTimeout(() => setCopied(false), 2000)
@@ -459,14 +602,9 @@ function NewClientModal({ onClose, onSave }: { onClose: () => void; onSave: (d: 
 
 function EditClientModal({ client, onClose, onSave }: { client: Client; onClose: () => void; onSave: (d: object) => void }) {
   const [form, setForm] = useState({
-    name: client.name,
-    company_name: client.company_name || '',
-    contact: client.contact || '',
-    password: '',
-    package: client.package,
-    start_date: client.start_date,
-    night_price: client.night_price,
-    sunday_price: client.sunday_price || 25,
+    name: client.name, company_name: client.company_name || '', contact: client.contact || '',
+    password: '', package: client.package, start_date: client.start_date,
+    night_price: client.night_price, sunday_price: client.sunday_price || 25,
   })
   const set = (k: string, v: string | number) => setForm(f => ({ ...f, [k]: v }))
   const [showPwd, setShowPwd] = useState(false)
@@ -477,7 +615,6 @@ function EditClientModal({ client, onClose, onSave }: { client: Client; onClose:
     const pwd = Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
     set('password', pwd); setCopied(false)
   }
-
   function copyPassword() {
     navigator.clipboard.writeText(form.password)
     setCopied(true); setTimeout(() => setCopied(false), 2000)
@@ -574,7 +711,7 @@ function NewReservationModal({ clients, defaultDate, defaultSlot, onClose, onSav
       </div>
       {isSelectedSunday && (
         <p className="text-xs text-purple-600 bg-purple-50 rounded-lg p-2 mb-3">
-          🗓️ Domingo — se cobrará el precio extra de domingo configurado para este cliente.
+          🗓️ Domingo — se cobrará el precio extra configurado para este cliente.
         </p>
       )}
       <div className="flex gap-2 justify-end mt-2">
