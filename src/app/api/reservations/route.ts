@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
         error: `Sin bloques disponibles (${usedQuota}/${total} usados)`
       }, { status: 400 })
     }
-
+  }
   // Insert — unique(date, slot) handles conflicts
   const { data, error } = await supabase
     .from('reservations')
