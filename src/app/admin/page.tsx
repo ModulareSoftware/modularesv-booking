@@ -998,7 +998,7 @@ function EditReservationModal({ reservation, clients, onClose, onSave, onDelete 
         </div>
         <div>
           <label className="text-xs text-slate-500">Turno</label>
-          <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" value={slot} onChange={e => setSlot(e.target.value as 'morning' | 'afternoon' | 'night')}
+          <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" value={slot} onChange={e => setSlot(e.target.value as 'morning' | 'afternoon' | 'night')}>
             <option value="morning">☀️ Mañana (7am–12pm)</option>
             <option value="afternoon">🌤️ Tarde (1pm–5pm)</option>
             <option value="night">🌙 Noche extra (6pm–9pm)</option>
