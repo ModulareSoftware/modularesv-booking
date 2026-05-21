@@ -786,20 +786,6 @@ function NewClientModal({ onClose, onSave }: { onClose: () => void; onSave: (d: 
     <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.extra_block_price} onChange={e => set('extra_block_price', parseFloat(e.target.value))} />
   </div>
 </div>
-          <label className="text-xs text-slate-500">Inicio vigencia</label>
-          <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.start_date} onChange={e => set('start_date', e.target.value)} />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3 mb-3">
-        <div>
-          <label className="text-xs text-slate-500">Precio noche extra ($)</label>
-          <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.night_price} onChange={e => set('night_price', parseFloat(e.target.value))} />
-        </div>
-        <div>
-          <label className="text-xs text-slate-500">Precio domingo ($)</label>
-          <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.sunday_price} onChange={e => set('sunday_price', parseFloat(e.target.value))} />
-        </div>
-      </div>
       <div className="border border-slate-100 rounded-xl p-3 mb-4 bg-slate-50">
         <p className="text-xs font-medium text-slate-600 mb-2">🔒 Depósito de garantía</p>
         <p className="text-xs text-slate-400 mb-3">50% del paquete sugerido: <strong>{fmt$(suggestedDeposit)}</strong></p>
@@ -895,20 +881,6 @@ function EditClientModal({ client, onClose, onSave }: { client: Client; onClose:
     <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.extra_block_price} onChange={e => set('extra_block_price', parseFloat(e.target.value))} />
   </div>
 </div>
-          <label className="text-xs text-slate-500">Inicio vigencia</label>
-          <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.start_date} onChange={e => set('start_date', e.target.value)} />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3 mb-3">
-        <div>
-          <label className="text-xs text-slate-500">Precio noche extra ($)</label>
-          <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.night_price} onChange={e => set('night_price', parseFloat(e.target.value))} />
-        </div>
-        <div>
-          <label className="text-xs text-slate-500">Precio domingo ($)</label>
-          <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.sunday_price} onChange={e => set('sunday_price', parseFloat(e.target.value))} />
-        </div>
-      </div>
       <div className="border border-slate-100 rounded-xl p-3 mb-4 bg-slate-50">
         <p className="text-xs font-medium text-slate-600 mb-3">🔒 Depósito de garantía</p>
         <div className="grid grid-cols-2 gap-3 mb-2">
