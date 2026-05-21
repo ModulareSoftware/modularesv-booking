@@ -28,11 +28,16 @@ function LoginForm() {
     <main className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-semibold text-slate-800 mb-1" style={{ fontFamily: 'Fraunces, serif' }}>
-            Modulare Flex Office
-          </h1>
-          <p className="text-slate-400 text-sm">Sistema de reservas de espacios flexibles</p>
-        </div>
+  <img
+    src="/Logo_M_Negro.png"
+    alt="Modulare Flex Office"
+    className="w-20 h-20 object-contain mx-auto mb-4"
+  />
+  <h1 className="text-3xl font-semibold text-slate-800 mb-1" style={{ fontFamily: 'Fraunces, serif' }}>
+    Modulare Flex Office
+  </h1>
+  <p className="text-slate-400 text-sm">Sistema de reservas de espacios flexibles</p>
+</div>
 
         <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
           <h2 className="font-semibold text-slate-700 mb-4">Iniciar sesión</h2>
