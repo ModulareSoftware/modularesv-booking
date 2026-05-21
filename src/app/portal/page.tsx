@@ -127,7 +127,9 @@ export default function PortalPage() {
 
   const isSelectedSunday = isSunday(date)
   const isSelectedNight = slot === 'night'
-  const canBook = isSelectedSunday || isSelectedNight || remaining > 0
+  const isExtraBlock = !isSelectedSunday && !isSelectedNight && remaining <= 0 && (slot === 'morning' || slot === 'afternoon') && !isSunday(date)
+const extraBlockPrice = (client as any).extra_block_price || 25
+const canBook = isSelectedSunday || isSelectedNight || remaining > 0 || isExtraBlock
 
   function chargeStatusLabel(status: string) {
     if (status === 'cobrado') return { label: '✓ Cobrado', color: 'bg-green-50 text-green-600' }
