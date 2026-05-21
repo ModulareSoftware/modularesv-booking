@@ -62,12 +62,11 @@ export async function POST(req: NextRequest) {
     }).length
 
     const total = PACKAGES[client.package as keyof typeof PACKAGES].blocks
-    if (usedQuota >= total) {
+    if (usedQuota >= total && !body.is_extra) {
       return NextResponse.json({
         error: `Sin bloques disponibles (${usedQuota}/${total} usados)`
       }, { status: 400 })
     }
-  }
 
   // Insert — unique(date, slot) handles conflicts
   const { data, error } = await supabase
