@@ -68,10 +68,9 @@ export default function AdminPage() {
 
   function getWeekDays() {
     const today = new Date()
-    const dow = today.getDay()
-    const diffToMonday = dow === 0 ? -6 : 1 - dow
+    const dow = today.getDay() === 0 ? 7 : today.getDay()
     const monday = new Date(today)
-    monday.setDate(today.getDate() + diffToMonday + weekOffset * 7)
+    monday.setDate(today.getDate() - (dow - 1) + weekOffset * 7)
     return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(monday); d.setDate(monday.getDate() + i); return d
     })
