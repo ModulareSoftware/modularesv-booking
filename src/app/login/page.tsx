@@ -29,7 +29,7 @@ function LoginForm() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
   <img
-    src="/Logo_M_Negro.png"
+    src="https://raw.githubusercontent.com/ModulareSoftware/modularesv-booking/main/Logo%20M%20Negro.png"
     alt="Modulare Flex Office"
     className="w-20 h-20 object-contain mx-auto mb-4"
   />
