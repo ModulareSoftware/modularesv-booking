@@ -38,7 +38,8 @@ export async function POST(req: NextRequest) {
       package: pkg,
       start_date,
       night_price: night_price || 25,
-      sunday_price: sunday_price || 25,
+sunday_price: sunday_price || 25,
+extra_block_price: body.extra_block_price || 25,
       deposit_amount: deposit_amount || 0,
       deposit_status: deposit_status || 'pendiente',
       deposit_date: deposit_date || null,
@@ -70,6 +71,7 @@ export async function PATCH(req: NextRequest) {
   if (start_date !== undefined) updateData.start_date = start_date
   if (night_price !== undefined) updateData.night_price = night_price
   if (sunday_price !== undefined) updateData.sunday_price = sunday_price
+  if (body.extra_block_price !== undefined) updateData.extra_block_price = body.extra_block_price
   if (deposit_amount !== undefined) updateData.deposit_amount = deposit_amount
   if (deposit_status !== undefined) updateData.deposit_status = deposit_status
   if (deposit_date !== undefined) updateData.deposit_date = deposit_date || null
