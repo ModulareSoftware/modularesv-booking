@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase, Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getVigencyEnd, fmtDisplay, ADMIN_EMAIL, isSunday, countsAgainstQuota, displayName } from '@/lib/supabase'
+import { supabase, Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getVigencyEnd, ADMIN_EMAIL, isSunday, countsAgainstQuota, displayName, fmt$, DEPOSIT_STATUS, DepositStatus } from '@/lib/supabase'
 
 const ADMIN_SECRET = 'Modular2024!'
 const DAYS_ES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
@@ -12,8 +12,6 @@ const IVA = 0.13
 function authHeaders() {
   return { 'Content-Type': 'application/json', 'x-admin-secret': ADMIN_SECRET }
 }
-
-function fmt$(n: number) { return `$${n.toFixed(2)}` }
 
 export default function AdminPage() {
   const router = useRouter()
@@ -98,19 +96,14 @@ export default function AdminPage() {
     const clientRes = reservations.filter(r => r.client_id === c.id)
     const nights = clientRes.filter(r => r.slot === 'night' && !isSunday(r.date)).length
     const sundays = clientRes.filter(r => isSunday(r.date)).length
-
     const baseNeto = pkg.price
     const nightNeto = nights * c.night_price
     const sundayNeto = sundays * (c.sunday_price || 25)
     const totalNeto = baseNeto + nightNeto + sundayNeto
-
     return {
       baseNeto, nightNeto, sundayNeto, totalNeto,
-      baseIva: baseNeto * IVA,
-      nightIva: nightNeto * IVA,
-      sundayIva: sundayNeto * IVA,
-      totalIva: totalNeto * IVA,
-      totalConIva: totalNeto * (1 + IVA),
+      baseIva: baseNeto * IVA, nightIva: nightNeto * IVA, sundayIva: sundayNeto * IVA,
+      totalIva: totalNeto * IVA, totalConIva: totalNeto * (1 + IVA),
       nights, sundays,
     }
   }
@@ -128,9 +121,9 @@ export default function AdminPage() {
   }
 
   const slotColors: Record<string, string> = {
-    morning:   'bg-blue-50 border-blue-300 text-blue-800',
+    morning: 'bg-blue-50 border-blue-300 text-blue-800',
     afternoon: 'bg-green-50 border-green-300 text-green-800',
-    night:     'bg-amber-50 border-amber-300 text-amber-800',
+    night: 'bg-amber-50 border-amber-300 text-amber-800',
   }
   const slotDots: Record<string, string> = {
     morning: 'bg-blue-400', afternoon: 'bg-green-400', night: 'bg-amber-400',
@@ -139,8 +132,6 @@ export default function AdminPage() {
   if (loading) return <div className="min-h-screen flex items-center justify-center text-slate-400">Cargando datos…</div>
 
   const { ref: monthRef, firstDay, daysInMonth } = getMonthDays()
-
-  // Billing totals
   const billingClients = billingClient ? clients.filter(c => c.id === billingClient) : clients
   const totalNetoMes = billingClients.reduce((sum, c) => sum + getClientBilling(c).totalNeto, 0)
   const totalIvaMes = totalNetoMes * IVA
@@ -225,8 +216,7 @@ export default function AdminPage() {
                           <div key={dateStr + slot}
                             onClick={() => res ? deleteReservation(res.id) : setShowNewRes({ date: dateStr, slot })}
                             className={`min-h-12 rounded-xl border cursor-pointer transition-all flex flex-col items-center justify-center text-center p-1
-                              ${res ? slotColors[slot] : isDom ? 'border-purple-100 bg-purple-50 hover:border-purple-300' : 'border-slate-100 bg-slate-50 hover:border-blue-300 hover:bg-blue-50'}`}
-                            title={res ? `${client ? displayName(client) : ''} — clic para cancelar` : ''}>
+                              ${res ? slotColors[slot] : isDom ? 'border-purple-100 bg-purple-50 hover:border-purple-300' : 'border-slate-100 bg-slate-50 hover:border-blue-300 hover:bg-blue-50'}`}>
                             {client ? <span className="text-xs font-medium leading-tight">{displayName(client).split(' ')[0]}</span> : <span className={`text-lg ${isDom ? 'text-purple-200' : 'text-slate-200'}`}>+</span>}
                           </div>
                         )
@@ -305,6 +295,7 @@ export default function AdminPage() {
                 const dl = daysLeft(c.start_date)
                 const end = getVigencyEnd(c.start_date)
                 const pkg = PACKAGES[c.package]
+                const depStatus = DEPOSIT_STATUS[c.deposit_status]
                 return (
                   <div key={c.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:border-slate-200">
                     <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-semibold flex-shrink-0">
@@ -317,10 +308,15 @@ export default function AdminPage() {
                         <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">{pkg.label}</span>
                         {dl <= 5 && <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">⚠️ {dl}d</span>}
                       </div>
-                      <div className="text-xs text-slate-400 mt-0.5">
-                        {used}/{total} bloques · vence {end.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-                        {nights > 0 && ` · ${nights} noches`}
-                        {sundays > 0 && ` · ${sundays} domingos`}
+                      <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-2 flex-wrap">
+                        <span>{used}/{total} bloques · vence {end.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
+                        {nights > 0 && <span>· {nights} noches</span>}
+                        {sundays > 0 && <span>· {sundays} domingos</span>}
+                        {c.deposit_amount > 0 && (
+                          <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${depStatus.color}`}>
+                            Depósito {fmt$(c.deposit_amount)} · {depStatus.label}
+                          </span>
+                        )}
                       </div>
                       <div className="mt-1.5 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                         <div className={`h-full rounded-full ${pct >= 100 ? 'bg-red-400' : pct >= 75 ? 'bg-amber-400' : 'bg-blue-400'}`} style={{ width: `${pct}%` }} />
@@ -384,12 +380,11 @@ export default function AdminPage() {
         {/* ── BILLING ── */}
         {tab === 'billing' && (
           <div className="space-y-4">
-            {/* Header & filter */}
             <div className="bg-white rounded-2xl border border-slate-200 p-4">
               <div className="flex items-center gap-3 flex-wrap">
                 <div>
                   <h2 className="font-semibold text-slate-700">Facturación del mes en curso</h2>
-                  <p className="text-xs text-slate-400 mt-0.5">Basado en reservas activas de cada cliente · IVA 13%</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Basado en reservas activas · IVA 13%</p>
                 </div>
                 <div className="ml-auto">
                   <select value={billingClient} onChange={e => setBillingClient(e.target.value)}
@@ -399,8 +394,6 @@ export default function AdminPage() {
                   </select>
                 </div>
               </div>
-
-              {/* Summary metrics */}
               <div className="grid grid-cols-3 gap-3 mt-4">
                 <div className="bg-slate-50 rounded-xl p-3">
                   <div className="text-xs text-slate-400 mb-1">Total neto</div>
@@ -417,12 +410,12 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Per-client breakdown */}
             {billingClients.map(c => {
               const b = getClientBilling(c)
               const pkg = PACKAGES[c.package]
               const dl = daysLeft(c.start_date)
               const end = getVigencyEnd(c.start_date)
+              const depStatus = DEPOSIT_STATUS[c.deposit_status]
               return (
                 <div key={c.id} className="bg-white rounded-2xl border border-slate-200 p-4">
                   <div className="flex items-center gap-3 mb-4">
@@ -440,54 +433,35 @@ export default function AdminPage() {
                     </div>
                   </div>
 
-                  {/* Desglose */}
-                  <div className="border border-slate-100 rounded-xl overflow-hidden">
-                    {/* Header */}
+                  <div className="border border-slate-100 rounded-xl overflow-hidden mb-3">
                     <div className="grid grid-cols-4 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-400 border-b border-slate-100">
                       <span>Concepto</span>
                       <span className="text-right">Neto</span>
                       <span className="text-right">IVA 13%</span>
                       <span className="text-right">Total</span>
                     </div>
-
-                    {/* Paquete base */}
                     <div className="grid grid-cols-4 px-3 py-2.5 text-sm border-b border-slate-50">
-                      <span className="text-slate-600">
-                        Paquete {pkg.label}
-                        <span className="text-xs text-slate-400 block">{pkg.blocks} bloques</span>
-                      </span>
+                      <span className="text-slate-600">Paquete {pkg.label}<span className="text-xs text-slate-400 block">{pkg.blocks} bloques</span></span>
                       <span className="text-right text-slate-600">{fmt$(b.baseNeto)}</span>
                       <span className="text-right text-slate-400">{fmt$(b.baseIva)}</span>
                       <span className="text-right font-medium">{fmt$(b.baseNeto + b.baseIva)}</span>
                     </div>
-
-                    {/* Noches extra */}
                     {b.nights > 0 && (
                       <div className="grid grid-cols-4 px-3 py-2.5 text-sm border-b border-slate-50">
-                        <span className="text-slate-600">
-                          Noches extra
-                          <span className="text-xs text-slate-400 block">{b.nights} × {fmt$(c.night_price)}</span>
-                        </span>
+                        <span className="text-slate-600">Noches extra<span className="text-xs text-slate-400 block">{b.nights} × {fmt$(c.night_price)}</span></span>
                         <span className="text-right text-slate-600">{fmt$(b.nightNeto)}</span>
                         <span className="text-right text-slate-400">{fmt$(b.nightIva)}</span>
                         <span className="text-right font-medium">{fmt$(b.nightNeto + b.nightIva)}</span>
                       </div>
                     )}
-
-                    {/* Domingos */}
                     {b.sundays > 0 && (
                       <div className="grid grid-cols-4 px-3 py-2.5 text-sm border-b border-slate-50">
-                        <span className="text-slate-600">
-                          Domingos
-                          <span className="text-xs text-slate-400 block">{b.sundays} × {fmt$(c.sunday_price || 25)}</span>
-                        </span>
+                        <span className="text-slate-600">Domingos<span className="text-xs text-slate-400 block">{b.sundays} × {fmt$(c.sunday_price || 25)}</span></span>
                         <span className="text-right text-slate-600">{fmt$(b.sundayNeto)}</span>
                         <span className="text-right text-slate-400">{fmt$(b.sundayIva)}</span>
                         <span className="text-right font-medium">{fmt$(b.sundayNeto + b.sundayIva)}</span>
                       </div>
                     )}
-
-                    {/* Total row */}
                     <div className="grid grid-cols-4 px-3 py-2.5 text-sm bg-slate-50 font-semibold">
                       <span className="text-slate-700">Total</span>
                       <span className="text-right text-slate-700">{fmt$(b.totalNeto)}</span>
@@ -495,15 +469,31 @@ export default function AdminPage() {
                       <span className="text-right text-blue-600">{fmt$(b.totalConIva)}</span>
                     </div>
                   </div>
+
+                  {/* Deposit info */}
+                  {c.deposit_amount > 0 && (
+                    <div className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border text-sm ${
+                      c.deposit_status === 'pagado' ? 'border-green-100 bg-green-50' :
+                      c.deposit_status === 'devuelto' ? 'border-blue-100 bg-blue-50' :
+                      c.deposit_status === 'retenido' ? 'border-red-100 bg-red-50' :
+                      'border-amber-100 bg-amber-50'
+                    }`}>
+                      <span className="text-lg">🔒</span>
+                      <div className="flex-1">
+                        <span className="font-medium">Depósito de garantía</span>
+                        <span className="text-xs text-slate-500 block">
+                          {c.deposit_date ? `Registrado el ${new Date(c.deposit_date + 'T12:00:00').toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}` : 'Sin fecha registrada'}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-semibold">{fmt$(c.deposit_amount)}</div>
+                        <span className={`text-xs font-medium ${depStatus.color} px-2 py-0.5 rounded-full`}>{depStatus.label}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )
             })}
-
-            {billingClients.length === 0 && (
-              <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-400 text-sm">
-                Sin clientes registrados
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -539,7 +529,11 @@ export default function AdminPage() {
 
 function NewClientModal({ onClose, onSave }: { onClose: () => void; onSave: (d: object) => void }) {
   const today = fmtDate(new Date())
-  const [form, setForm] = useState({ name: '', company_name: '', contact: '', password: '', package: 'basic', start_date: today, night_price: 25, sunday_price: 25 })
+  const [form, setForm] = useState({
+    name: '', company_name: '', contact: '', password: '', package: 'basic',
+    start_date: today, night_price: 25, sunday_price: 25,
+    deposit_amount: 0, deposit_status: 'pendiente', deposit_date: today,
+  })
   const set = (k: string, v: string | number) => setForm(f => ({ ...f, [k]: v }))
   const [copied, setCopied] = useState(false)
 
@@ -552,6 +546,8 @@ function NewClientModal({ onClose, onSave }: { onClose: () => void; onSave: (d: 
     navigator.clipboard.writeText(form.password)
     setCopied(true); setTimeout(() => setCopied(false), 2000)
   }
+
+  const suggestedDeposit = PACKAGES[form.package as keyof typeof PACKAGES].price * 0.5
 
   return (
     <Modal title="Registrar nuevo cliente" onClose={onClose}>
@@ -571,7 +567,7 @@ function NewClientModal({ onClose, onSave }: { onClose: () => void; onSave: (d: 
       <div className="grid grid-cols-2 gap-3 mb-3">
         <div>
           <label className="text-xs text-slate-500">Paquete</label>
-          <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" value={form.package} onChange={e => set('package', e.target.value)}>
+          <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" value={form.package} onChange={e => { set('package', e.target.value); set('deposit_amount', PACKAGES[e.target.value as keyof typeof PACKAGES].price * 0.5) }}>
             <option value="premium">🥇 Premium — 10 bloques</option>
             <option value="basic">🥈 Básico — 6 bloques</option>
             <option value="lite">🥉 Lite — 3 bloques</option>
@@ -582,7 +578,7 @@ function NewClientModal({ onClose, onSave }: { onClose: () => void; onSave: (d: 
           <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.start_date} onChange={e => set('start_date', e.target.value)} />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-3 mb-4">
+      <div className="grid grid-cols-2 gap-3 mb-3">
         <div>
           <label className="text-xs text-slate-500">Precio noche extra ($)</label>
           <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.night_price} onChange={e => set('night_price', parseFloat(e.target.value))} />
@@ -592,6 +588,32 @@ function NewClientModal({ onClose, onSave }: { onClose: () => void; onSave: (d: 
           <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.sunday_price} onChange={e => set('sunday_price', parseFloat(e.target.value))} />
         </div>
       </div>
+
+      {/* Deposit section */}
+      <div className="border border-slate-100 rounded-xl p-3 mb-4 bg-slate-50">
+        <p className="text-xs font-medium text-slate-600 mb-2">🔒 Depósito de garantía</p>
+        <p className="text-xs text-slate-400 mb-3">50% del paquete sugerido: <strong>{fmt$(suggestedDeposit)}</strong></p>
+        <div className="grid grid-cols-2 gap-3 mb-2">
+          <div>
+            <label className="text-xs text-slate-500">Monto ($)</label>
+            <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" value={form.deposit_amount} onChange={e => set('deposit_amount', parseFloat(e.target.value))} />
+          </div>
+          <div>
+            <label className="text-xs text-slate-500">Estado</label>
+            <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" value={form.deposit_status} onChange={e => set('deposit_status', e.target.value)}>
+              <option value="pendiente">🟡 Pendiente</option>
+              <option value="pagado">🟢 Pagado</option>
+              <option value="devuelto">🔵 Devuelto</option>
+              <option value="retenido">🔴 Retenido</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label className="text-xs text-slate-500">Fecha de pago del depósito</label>
+          <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" value={form.deposit_date} onChange={e => set('deposit_date', e.target.value)} />
+        </div>
+      </div>
+
       <div className="flex gap-2 justify-end">
         <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg hover:bg-slate-100">Cancelar</button>
         <button onClick={() => onSave(form)} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Registrar</button>
@@ -605,6 +627,8 @@ function EditClientModal({ client, onClose, onSave }: { client: Client; onClose:
     name: client.name, company_name: client.company_name || '', contact: client.contact || '',
     password: '', package: client.package, start_date: client.start_date,
     night_price: client.night_price, sunday_price: client.sunday_price || 25,
+    deposit_amount: client.deposit_amount || 0, deposit_status: client.deposit_status || 'pendiente',
+    deposit_date: client.deposit_date || fmtDate(new Date()),
   })
   const set = (k: string, v: string | number) => setForm(f => ({ ...f, [k]: v }))
   const [showPwd, setShowPwd] = useState(false)
@@ -662,7 +686,7 @@ function EditClientModal({ client, onClose, onSave }: { client: Client; onClose:
           <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.start_date} onChange={e => set('start_date', e.target.value)} />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-3 mb-4">
+      <div className="grid grid-cols-2 gap-3 mb-3">
         <div>
           <label className="text-xs text-slate-500">Precio noche extra ($)</label>
           <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.night_price} onChange={e => set('night_price', parseFloat(e.target.value))} />
@@ -672,6 +696,31 @@ function EditClientModal({ client, onClose, onSave }: { client: Client; onClose:
           <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.sunday_price} onChange={e => set('sunday_price', parseFloat(e.target.value))} />
         </div>
       </div>
+
+      {/* Deposit section */}
+      <div className="border border-slate-100 rounded-xl p-3 mb-4 bg-slate-50">
+        <p className="text-xs font-medium text-slate-600 mb-3">🔒 Depósito de garantía</p>
+        <div className="grid grid-cols-2 gap-3 mb-2">
+          <div>
+            <label className="text-xs text-slate-500">Monto ($)</label>
+            <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" value={form.deposit_amount} onChange={e => set('deposit_amount', parseFloat(e.target.value))} />
+          </div>
+          <div>
+            <label className="text-xs text-slate-500">Estado</label>
+            <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" value={form.deposit_status} onChange={e => set('deposit_status', e.target.value)}>
+              <option value="pendiente">🟡 Pendiente</option>
+              <option value="pagado">🟢 Pagado</option>
+              <option value="devuelto">🔵 Devuelto</option>
+              <option value="retenido">🔴 Retenido</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label className="text-xs text-slate-500">Fecha de pago del depósito</label>
+          <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" value={form.deposit_date} onChange={e => set('deposit_date', e.target.value)} />
+        </div>
+      </div>
+
       <div className="flex gap-2 justify-end">
         <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg hover:bg-slate-100">Cancelar</button>
         <button onClick={() => onSave(form)} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Guardar cambios</button>
