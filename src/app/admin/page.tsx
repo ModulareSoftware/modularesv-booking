@@ -465,11 +465,31 @@ export default function AdminPage() {
                   <h2 className="font-semibold text-slate-700">Facturación del mes en curso</h2>
                   <p className="text-xs text-slate-400 mt-0.5">Basado en reservas activas · IVA 13%</p>
                 </div>
-                <div className="ml-auto">
+               <div className="flex gap-2 flex-wrap ml-auto">
                   <select value={billingClient} onChange={e => setBillingClient(e.target.value)}
                     className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
                     <option value="">Todos los clientes</option>
                     {clients.map(c => <option key={c.id} value={c.id}>{displayName(c)}</option>)}
+                  </select>
+                  <select value={billingMonth2} onChange={e => setBillingMonth2(e.target.value)}
+                    className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
+                    <option value="">Todos los meses</option>
+                    {[0,1,2,3,4,5,6,7,8,9,10,11].map(m => (
+                      <option key={m} value={String(m)}>{MONTHS_ES[m]}</option>
+                    ))}
+                  </select>
+                  <select value={billingYear} onChange={e => setBillingYear(e.target.value)}
+                    className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
+                    <option value="">Todos los años</option>
+                    {[2025,2026,2027,2028].map(y => (
+                      <option key={y} value={String(y)}>{y}</option>
+                    ))}
+                  </select>
+                  <select value={billingVigency} onChange={e => setBillingVigency(e.target.value)}
+                    className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
+                    <option value="">Cualquier vigencia</option>
+                    <option value="active">Vigencia activa</option>
+                    <option value="expired">Vigencia vencida</option>
                   </select>
                 </div>
               </div>
