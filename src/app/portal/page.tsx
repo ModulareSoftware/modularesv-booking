@@ -9,6 +9,7 @@ export default function PortalPage() {
   const router = useRouter()
   const [client, setClient] = useState<Client | null>(null)
   const [reservations, setReservations] = useState<Reservation[]>([])
+  const [billingMonth, setBillingMonth] = useState<any>(null)
   const [date, setDate] = useState(fmtDate(new Date()))
   const [slot, setSlot] = useState('morning')
   const [alert, setAlert] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null)
@@ -27,21 +28,29 @@ export default function PortalPage() {
 
       if (byUserId) {
         setClient(byUserId)
+        loadClientData(byUserId.id)
       } else {
         const { data: byEmail } = await supabase
           .from('clients').select('*').eq('contact', user.email).single()
-        if (byEmail) setClient(byEmail)
+        if (byEmail) {
+          setClient(byEmail)
+          loadClientData(byEmail.id)
+        }
       }
       setLoading(false)
     }
     init()
   }, [router])
 
-  useEffect(() => {
-    if (!client) return
-    fetch(`/api/reservations?client_id=${client.id}`)
-      .then(r => r.json()).then(setReservations)
-  }, [client])
+  async function loadClientData(clientId: string) {
+    const [resRes, billRes] = await Promise.all([
+      fetch(`/api/reservations?client_id=${clientId}`),
+      fetch(`/api/billing?client_id=${clientId}`),
+    ])
+    setReservations(await resRes.json())
+    const bills = await billRes.json()
+    if (bills.length > 0) setBillingMonth(bills[0])
+  }
 
   async function logout() {
     await supabase.auth.signOut()
@@ -60,7 +69,7 @@ export default function PortalPage() {
     setSaving(false)
     if (!res.ok) { setAlert({ type: 'err', msg: json.error }); return }
     setAlert({ type: 'ok', msg: `✅ Reserva confirmada: ${new Date(json.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })} · ${SLOTS[json.slot as keyof typeof SLOTS].label}` })
-    fetch(`/api/reservations?client_id=${client.id}`).then(r => r.json()).then(setReservations)
+    loadClientData(client.id)
   }
 
   async function cancelReservation(id: string) {
@@ -84,7 +93,6 @@ export default function PortalPage() {
     </div>
   )
 
-  // Usage
   const usedQuota = reservations.filter(r => countsAgainstQuota(r.date, r.slot)).length
   const nights = reservations.filter(r => r.slot === 'night' && !isSunday(r.date)).length
   const sundays = reservations.filter(r => isSunday(r.date)).length
@@ -94,7 +102,6 @@ export default function PortalPage() {
   const dl = daysLeft(client.start_date)
   const end = getVigencyEnd(client.start_date)
 
-  // Billing
   const pkg = PACKAGES[client.package]
   const baseNeto = pkg.price
   const nightNeto = nights * client.night_price
@@ -107,10 +114,25 @@ export default function PortalPage() {
   const totalConIva = totalNeto * (1 + IVA)
 
   const depStatus = client.deposit_status ? DEPOSIT_STATUS[client.deposit_status] : null
+  const pkgStatus = billingMonth?.package_status || 'pendiente'
+
+  const extraReservations = reservations
+    .filter(r => r.slot === 'night' || isSunday(r.date))
+    .map(r => ({
+      ...r,
+      chargeStatus: (r as any).charge_status || 'programado'
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date))
 
   const isSelectedSunday = isSunday(date)
   const isSelectedNight = slot === 'night'
   const canBook = isSelectedSunday || isSelectedNight || remaining > 0
+
+  function chargeStatusLabel(status: string) {
+    if (status === 'cobrado') return { label: '✓ Cobrado', color: 'bg-green-50 text-green-600' }
+    if (status === 'por_cobrar') return { label: '⏳ Por cobrar', color: 'bg-orange-50 text-orange-600' }
+    return { label: '🔒 Programado', color: 'bg-slate-100 text-slate-500' }
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -264,7 +286,7 @@ export default function PortalPage() {
               <p className="text-xs text-slate-400 mt-0.5">Mes en curso · IVA 13%</p>
             </div>
 
-            {/* Summary metrics */}
+            {/* Métricas */}
             <div className="grid grid-cols-3 gap-3 mb-5">
               <div className="bg-slate-50 rounded-xl p-3">
                 <div className="text-xs text-slate-400 mb-1">Neto</div>
@@ -280,7 +302,7 @@ export default function PortalPage() {
               </div>
             </div>
 
-            {/* Desglose mensual */}
+            {/* Desglose */}
             <div className="border border-slate-100 rounded-xl overflow-hidden mb-4">
               <div className="grid grid-cols-4 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-400 border-b border-slate-100">
                 <span>Concepto</span>
@@ -288,37 +310,78 @@ export default function PortalPage() {
                 <span className="text-right">IVA</span>
                 <span className="text-right">Total</span>
               </div>
-              <div className="grid grid-cols-4 px-3 py-2.5 text-sm border-b border-slate-50">
-                <span className="text-slate-600">
-                  Paquete {pkg.label}
-                  <span className="text-xs text-slate-400 block">{pkg.blocks} bloques</span>
-                </span>
-                <span className="text-right text-slate-600">{fmt$(baseNeto)}</span>
-                <span className="text-right text-slate-400">{fmt$(baseIva)}</span>
-                <span className="text-right font-medium">{fmt$(baseNeto + baseIva)}</span>
+
+              {/* Paquete con estado */}
+              <div className="px-3 py-2.5 text-sm border-b border-slate-50">
+                <div className="grid grid-cols-4 items-start">
+                  <div>
+                    <span className="text-slate-600">Paquete {pkg.label}</span>
+                    <span className="text-xs text-slate-400 block">{pkg.blocks} bloques</span>
+                    <span className={`mt-1 inline-block text-xs px-2 py-0.5 rounded-full font-medium ${pkgStatus === 'pagado' ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'}`}>
+                      {pkgStatus === 'pagado' ? '✓ Pagado' : '⏳ Pendiente de pago'}
+                    </span>
+                  </div>
+                  <span className="text-right text-slate-600">{fmt$(baseNeto)}</span>
+                  <span className="text-right text-slate-400">{fmt$(baseIva)}</span>
+                  <span className="text-right font-medium">{fmt$(baseNeto + baseIva)}</span>
+                </div>
               </div>
-              {nights > 0 && (
-                <div className="grid grid-cols-4 px-3 py-2.5 text-sm border-b border-slate-50">
-                  <span className="text-slate-600">
-                    Noches extra
-                    <span className="text-xs text-slate-400 block">{nights} × {fmt$(client.night_price)}</span>
-                  </span>
-                  <span className="text-right text-slate-600">{fmt$(nightNeto)}</span>
-                  <span className="text-right text-slate-400">{fmt$(nightIva)}</span>
-                  <span className="text-right font-medium">{fmt$(nightNeto + nightIva)}</span>
+
+              {/* Noches con estado individual */}
+              {extraReservations.filter(r => r.slot === 'night' && !isSunday(r.date)).length > 0 && (
+                <div className="border-b border-slate-50">
+                  <div className="grid grid-cols-4 px-3 py-2 text-sm items-start">
+                    <div>
+                      <span className="text-slate-600">Noches extra</span>
+                      <span className="text-xs text-slate-400 block">{extraReservations.filter(r => r.slot === 'night' && !isSunday(r.date)).length} × {fmt$(client.night_price)}</span>
+                    </div>
+                    <span className="text-right text-slate-600">{fmt$(nightNeto)}</span>
+                    <span className="text-right text-slate-400">{fmt$(nightIva)}</span>
+                    <span className="text-right font-medium">{fmt$(nightNeto + nightIva)}</span>
+                  </div>
+                  <div className="px-3 pb-2 space-y-1">
+                    {extraReservations.filter(r => r.slot === 'night' && !isSunday(r.date)).map(r => {
+                      const cs = chargeStatusLabel(r.chargeStatus)
+                      return (
+                        <div key={r.id} className="flex items-center gap-2 text-xs">
+                          <span className="text-slate-400">{new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit' })}</span>
+                          <span className="flex-1" />
+                          <span className={`px-2 py-0.5 rounded-full font-medium ${cs.color}`}>{cs.label}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
               )}
-              {sundays > 0 && (
-                <div className="grid grid-cols-4 px-3 py-2.5 text-sm border-b border-slate-50">
-                  <span className="text-slate-600">
-                    Domingos
-                    <span className="text-xs text-slate-400 block">{sundays} × {fmt$(client.sunday_price || 25)}</span>
-                  </span>
-                  <span className="text-right text-slate-600">{fmt$(sundayNeto)}</span>
-                  <span className="text-right text-slate-400">{fmt$(sundayIva)}</span>
-                  <span className="text-right font-medium">{fmt$(sundayNeto + sundayIva)}</span>
+
+              {/* Domingos con estado individual */}
+              {extraReservations.filter(r => isSunday(r.date)).length > 0 && (
+                <div className="border-b border-slate-50">
+                  <div className="grid grid-cols-4 px-3 py-2 text-sm items-start">
+                    <div>
+                      <span className="text-slate-600">Domingos</span>
+                      <span className="text-xs text-slate-400 block">{extraReservations.filter(r => isSunday(r.date)).length} × {fmt$(client.sunday_price || 25)}</span>
+                    </div>
+                    <span className="text-right text-slate-600">{fmt$(sundayNeto)}</span>
+                    <span className="text-right text-slate-400">{fmt$(sundayIva)}</span>
+                    <span className="text-right font-medium">{fmt$(sundayNeto + sundayIva)}</span>
+                  </div>
+                  <div className="px-3 pb-2 space-y-1">
+                    {extraReservations.filter(r => isSunday(r.date)).map(r => {
+                      const cs = chargeStatusLabel(r.chargeStatus)
+                      return (
+                        <div key={r.id} className="flex items-center gap-2 text-xs">
+                          <span className="text-slate-400">{new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit' })}</span>
+                          <span className="flex-1" />
+                          <span className={`px-2 py-0.5 rounded-full font-medium ${cs.color}`}>{cs.label}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
               )}
+
+              {/* Total */}
               <div className="grid grid-cols-4 px-3 py-2.5 text-sm bg-slate-50 font-semibold">
                 <span className="text-slate-700">Total mes</span>
                 <span className="text-right text-slate-700">{fmt$(totalNeto)}</span>
@@ -327,7 +390,7 @@ export default function PortalPage() {
               </div>
             </div>
 
-            {/* Depósito de garantía */}
+            {/* Depósito */}
             {client.deposit_amount > 0 && depStatus && (
               <div className={`rounded-xl border p-3 ${
                 client.deposit_status === 'pagado' ? 'border-green-100 bg-green-50' :
@@ -359,7 +422,6 @@ export default function PortalPage() {
             </p>
           </div>
         )}
-
       </div>
     </div>
   )
