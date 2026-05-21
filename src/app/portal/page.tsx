@@ -110,6 +110,7 @@ const extraBlocksCount = extraBlocks > 0 ? extraBlocks : 0
   const dl = daysLeft(client.start_date)
   const end = getVigencyEnd(client.start_date)
   const pkg = PACKAGES[client.package]
+  const extraBlockPrice = (client as any).extra_block_price || 25
   const baseNeto = pkg.price
   const nightNeto = nights * client.night_price
   const sundayNeto = sundays * (client.sunday_price || 25)
@@ -131,7 +132,7 @@ const totalNeto = baseNeto + nightNeto + sundayNeto + extraBlockNeto
   const isSelectedSunday = isSunday(date)
   const isSelectedNight = slot === 'night'
   const isExtraBlock = !isSelectedSunday && !isSelectedNight && remaining <= 0 && (slot === 'morning' || slot === 'afternoon') && !isSunday(date)
-const extraBlockPrice = (client as any).extra_block_price || 25
+
 const canBook = isSelectedSunday || isSelectedNight || remaining > 0 || isExtraBlock
 
   function chargeStatusLabel(status: string) {
