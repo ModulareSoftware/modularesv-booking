@@ -18,7 +18,7 @@ export default function PortalPage() {
   const [alert, setAlert] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [portalTab, setPortalTab] = useState<'reservas' | 'facturacion'>('reservas')
+  const [portalTab, setPortalTab] = useState<'reservas' | 'calendario' | 'facturacion'>('reservas')
   const [calMonthOffset, setCalMonthOffset] = useState(0)
 
   useEffect(() => {
@@ -218,7 +218,11 @@ export default function PortalPage() {
         <div className="flex bg-slate-100 rounded-xl p-1 gap-1 mb-4">
           <button onClick={() => setPortalTab('reservas')}
             className={`flex-1 text-sm py-2 rounded-lg transition-all ${portalTab === 'reservas' ? 'bg-white shadow-sm font-medium' : 'text-slate-500'}`}>
-            📅 Mis reservas
+            📅 Reservas
+          </button>
+          <button onClick={() => setPortalTab('calendario')}
+            className={`flex-1 text-sm py-2 rounded-lg transition-all ${portalTab === 'calendario' ? 'bg-white shadow-sm font-medium' : 'text-slate-500'}`}>
+            📆 Calendario
           </button>
           <button onClick={() => setPortalTab('facturacion')}
             className={`flex-1 text-sm py-2 rounded-lg transition-all ${portalTab === 'facturacion' ? 'bg-white shadow-sm font-medium' : 'text-slate-500'}`}>
