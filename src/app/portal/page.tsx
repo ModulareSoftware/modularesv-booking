@@ -228,7 +228,7 @@ export default function PortalPage() {
 
         {/* ── RESERVAS TAB ── */}
         {portalTab === 'reservas' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
 
             {/* LEFT — Calendar */}
             <div className="bg-white rounded-2xl border border-slate-200 p-4">
