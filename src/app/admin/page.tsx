@@ -487,20 +487,6 @@ export default function AdminPage() {
                     <option value="">Todos los clientes</option>
                     {clients.map(c => <option key={c.id} value={c.id}>{displayName(c)}</option>)}
                   </select>
-                  <select value={billingMonth2} onChange={e => setBillingMonth2(e.target.value)}
-                    className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
-                    <option value="">Todos los meses</option>
-                    {[0,1,2,3,4,5,6,7,8,9,10,11].map(m => (
-                      <option key={m} value={String(m)}>{MONTHS_ES[m]}</option>
-                    ))}
-                  </select>
-                  <select value={billingYear} onChange={e => setBillingYear(e.target.value)}
-                    className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
-                    <option value="">Todos los años</option>
-                    {[2025,2026,2027,2028].map(y => (
-                      <option key={y} value={String(y)}>{y}</option>
-                    ))}
-                  </select>
                   <select value={billingVigency} onChange={e => setBillingVigency(e.target.value)}
                     className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
                     <option value="">Cualquier vigencia</option>
