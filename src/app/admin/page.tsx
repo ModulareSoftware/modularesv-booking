@@ -710,7 +710,7 @@ const pendingExtras = extraRes.filter(r => r.chargeStatus === 'por_cobrar').leng
   </div>
 )}
 <div className="text-xs text-slate-400 mt-1">
-  {contract ? `${new Date(contract[`month${selectedContractMonth[c.id] || contractMonth || 1}_start`] + 'T12:00:00').toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })} → ${new Date(contract[`month${selectedContractMonth[c.id] || contractMonth || 1}_end`] + 'T12:00:00').toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}` : `Vigencia hasta ${end.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })} · ${dl}d restantes`}
+  {contract ? `${new Date(contract[`month${selectedContractMonth[c.id] || currentMonth}_start`] + 'T12:00:00').toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })} → ${new Date(contract[`month${selectedContractMonth[c.id] || currentMonth}_end`] + 'T12:00:00').toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}` : `Vigencia hasta ${end.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })} · ${dl}d restantes`}
 </div>
                     </div>
                     <div className="ml-auto text-right flex flex-col items-end gap-2">
