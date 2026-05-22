@@ -367,9 +367,19 @@ const pkgStatus = billingMonth?.package_status || 'pendiente'
   })
 
   const billingReservations = (clientId: string) => reservations.filter(r => r.client_id === clientId)
-  const totalNetoMes = billingClients.reduce((sum, c) => sum + getClientBilling(c).totalNeto, 0)
-  const totalIvaMes = totalNetoMes * IVA
-  const totalConIvaMes = totalNetoMes * (1 + IVA)
+  const totalNetoMes = billingClients.reduce((sum, c) => {
+  const contract = contracts.find(ct => ct.client_id === c.id && ct.status === 'active')
+  const today3 = new Date()
+  const currentMonth = contract ? (
+    today3 >= new Date(contract.month1_start) && today3 <= new Date(contract.month1_end + 'T23:59:59') ? 1 :
+    today3 >= new Date(contract.month2_start) && today3 <= new Date(contract.month2_end + 'T23:59:59') ? 2 :
+    today3 >= new Date(contract.month3_start) && today3 <= new Date(contract.month3_end + 'T23:59:59') ? 3 : 1
+  ) : 1
+  const selectedMonth = selectedContractMonth[c.id] || currentMonth
+  return sum + getClientBilling(c, selectedMonth).totalNeto
+}, 0)
+const totalIvaMes = totalNetoMes * IVA
+const totalConIvaMes = totalNetoMes * (1 + IVA)
 
   return (
     <div className="min-h-screen bg-slate-50">
