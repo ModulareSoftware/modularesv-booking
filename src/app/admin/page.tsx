@@ -958,7 +958,12 @@ const pendingExtras = extraRes.filter(r => r.chargeStatus === 'por_cobrar').leng
     setEditingRes(null)
   }}
 />}
-      {showNewRes !== null && <NewReservationModal clients={clients} defaultDate={showNewRes.date} defaultSlot={showNewRes.slot}
+      {showNewRes !== null && <NewReservationModal
+        clients={clients}
+        reservations={reservations}
+        contracts={contracts}
+        defaultDate={showNewRes.date}
+        defaultSlot={showNewRes.slot}
         onClose={() => setShowNewRes(null)}
         onSave={async (data) => {
           const res = await fetch('/api/reservations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
@@ -1175,29 +1180,65 @@ function EditClientModal({ client, onClose, onSave }: { client: Client; onClose:
   )
 }
 
-function NewReservationModal({ clients, defaultDate, defaultSlot, onClose, onSave }:
-  { clients: Client[]; defaultDate?: string; defaultSlot?: string; onClose: () => void; onSave: (d: object) => void }) {
+function NewReservationModal({ clients, reservations, contracts, defaultDate, defaultSlot, onClose, onSave }:
+  { clients: Client[]; reservations: Reservation[]; contracts: any[]; defaultDate?: string; defaultSlot?: string; onClose: () => void; onSave: (d: object) => void }) {
   const today = fmtDate(new Date())
   const [form, setForm] = useState({ client_id: clients[0]?.id || '', date: defaultDate || today, slot: defaultSlot || 'morning' })
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
+
   const isSelectedSunday = form.date ? isSunday(form.date) : false
+  const selectedClient = clients.find(c => c.id === form.client_id)
+  const extraBlockPrice = selectedClient ? (selectedClient as any).extra_block_price || 25 : 25
+
+  // Calcular si es bloque extra
+  const isExtraBlock = (() => {
+    if (!selectedClient || !form.date || form.slot === 'night' || isSelectedSunday) return false
+    const contract = contracts.find(ct => ct.client_id === form.client_id && ct.status === 'active')
+    const d = new Date(form.date + 'T12:00:00')
+    let monthStart: string | null = null
+    let monthEnd: string | null = null
+    if (contract) {
+      for (const m of [1, 2, 3]) {
+        const ms = new Date(contract[`month${m}_start`] + 'T00:00:00')
+        const me = new Date(contract[`month${m}_end`] + 'T23:59:59')
+        if (d >= ms && d <= me) { monthStart = contract[`month${m}_start`]; monthEnd = contract[`month${m}_end`]; break }
+      }
+    } else {
+      monthStart = selectedClient.start_date
+      monthEnd = getVigencyEnd(selectedClient.start_date).toISOString().slice(0, 10)
+    }
+    if (!monthStart || !monthEnd) return false
+    const usedQuota = reservations.filter(r => {
+      if (r.client_id !== form.client_id) return false
+      if (r.slot === 'night') return false
+      if (new Date(r.date + 'T12:00:00').getDay() === 0) return false
+      const rd = new Date(r.date + 'T12:00:00')
+      return rd >= new Date(monthStart! + 'T00:00:00') && rd <= new Date(monthEnd! + 'T23:59:59')
+    }).length
+    const total = PACKAGES[selectedClient.package as keyof typeof PACKAGES].blocks
+    return usedQuota >= total
+  })()
+
   return (
     <Modal title="Nueva reserva" onClose={onClose}>
       <label className="text-xs text-slate-500">Cliente</label>
-      <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-3 bg-white" value={form.client_id} onChange={e => set('client_id', e.target.value)}>
+      <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 mb-3 bg-white"
+        value={form.client_id} onChange={e => set('client_id', e.target.value)}>
         {clients.map(c => <option key={c.id} value={c.id}>{displayName(c)}</option>)}
       </select>
       <div className="grid grid-cols-2 gap-3 mb-3">
         <div>
           <label className="text-xs text-slate-500">Fecha</label>
-          <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.date} min={today} onChange={e => set('date', e.target.value)} />
+          <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1"
+            value={form.date} onChange={e => set('date', e.target.value)} />
           {form.date && <div className="text-xs text-slate-400 mt-1">
             {new Date(form.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}
           </div>}
         </div>
         <div>
           <label className="text-xs text-slate-500">Turno</label>
-          <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" value={form.slot} onChange={e => set('slot', e.target.value)}>
+          <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white"
+            value={form.slot} onChange={e => set('slot', e.target.value)}>
             <option value="morning">☀️ Mañana (7am–12pm)</option>
             <option value="afternoon">🌤️ Tarde (1pm–5pm)</option>
             <option value="night">🌙 Noche extra (6pm–9pm)</option>
@@ -1209,9 +1250,22 @@ function NewReservationModal({ clients, defaultDate, defaultSlot, onClose, onSav
           🗓️ Domingo — se cobrará el precio extra configurado para este cliente.
         </p>
       )}
+      {isExtraBlock && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-3">
+          <p className="text-xs font-semibold text-amber-700 mb-1">⚠️ Paquete agotado este mes</p>
+          <p className="text-xs text-amber-600">
+            Este cliente ya usó todos sus bloques del mes. Al confirmar se reservará un bloque extra
+            con costo adicional de <strong>${extraBlockPrice.toFixed(2)}</strong> para el cliente.
+          </p>
+        </div>
+      )}
       <div className="flex gap-2 justify-end mt-2">
         <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg hover:bg-slate-100">Cancelar</button>
-        <button onClick={() => onSave(form)} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Confirmar</button>
+        <button
+          onClick={() => onSave({ ...form, is_extra: isExtraBlock })}
+          className={`px-4 py-2 text-sm text-white rounded-lg ${isExtraBlock ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}>
+          {isExtraBlock ? '⚠️ Confirmar bloque extra' : 'Confirmar'}
+        </button>
       </div>
     </Modal>
   )
