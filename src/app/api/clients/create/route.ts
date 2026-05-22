@@ -46,13 +46,25 @@ export async function POST(req: NextRequest) {
   if (!name || !pkg || !start_date || !contact || !password) {
     return NextResponse.json({ error: 'Faltan campos requeridos' }, { status: 400 })
   }
-  const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
-    email: contact,
-    password,
-    email_confirm: true,
-  })
-  if (authError) {
-    return NextResponse.json({ error: `Error creando usuario: ${authError.message}` }, { status: 500 })
+ // Buscar si el correo ya existe en Auth
+  const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers()
+  const existingUser = existingUsers?.users?.find(u => u.email === contact)
+  
+  let authUserId: string
+  if (existingUser) {
+    // Reutilizar usuario existente y actualizar contraseña
+    await supabaseAdmin.auth.admin.updateUserById(existingUser.id, { password })
+    authUserId = existingUser.id
+  } else {
+    const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email: contact,
+      password,
+      email_confirm: true,
+    })
+    if (authError) {
+      return NextResponse.json({ error: `Error creando usuario: ${authError.message}` }, { status: 500 })
+    }
+    authUserId = authUser.user.id
   }
   const { data, error } = await supabaseAdmin
     .from('clients')
