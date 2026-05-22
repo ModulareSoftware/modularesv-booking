@@ -40,6 +40,7 @@ const [editingRes, setEditingRes] = useState<Reservation | null>(null)
   const [billingClient, setBillingClient] = useState('')
   const [billingVigency, setBillingVigency] = useState('')
   const [alert, setAlert] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null)
+const [contracts, setContracts] = useState<any[]>([])
 
   useEffect(() => {
     async function checkAuth() {
@@ -55,14 +56,16 @@ const [editingRes, setEditingRes] = useState<Reservation | null>(null)
   }
 
   const loadData = useCallback(async () => {
-    const [cRes, rRes, bRes] = await Promise.all([
-      fetch('/api/clients'),
-      fetch('/api/reservations'),
-      fetch('/api/billing'),
-    ])
-    setClients(await cRes.json())
-    setReservations(await rRes.json())
-    setBillingMonths(await bRes.json())
+    const [cRes, rRes, bRes, conRes] = await Promise.all([
+  fetch('/api/clients'),
+  fetch('/api/reservations'),
+  fetch('/api/billing'),
+  fetch('/api/contracts'),
+])
+setClients(await cRes.json())
+setReservations(await rRes.json())
+setBillingMonths(await bRes.json())
+setContracts(await conRes.json())
     setLoading(false)
   }, [])
 
