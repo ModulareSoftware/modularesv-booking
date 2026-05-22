@@ -239,7 +239,9 @@ async function editReservation(id: string, date: string, slot: string) {
   }
   function printClientBilling(c: Client) {
   const pkg = PACKAGES[c.package]
-  const b = getClientBilling(c)
+  const contract = contracts.find(ct => ct.client_id === c.id && ct.status === 'active')
+const selectedMonth = selectedContractMonth[c.id] || contractMonth || 1
+const b = getClientBilling(c, selectedMonth)
   const end = getVigencyEnd(c.start_date)
   const billingMonth = getCurrentBillingMonth(c)
   const pkgStatus = billingMonth?.package_status || 'pendiente'
@@ -675,8 +677,27 @@ const contractMonth = contract ? (
                     </div>
                     <div>
                       <div className="font-semibold text-sm">{displayName(c)}</div>
-                      {c.company_name && <div className="text-xs text-slate-400">{c.name}</div>}
-                      <div className="text-xs text-slate-400">Vigencia hasta {end.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })} · {dl}d restantes</div>
+{c.company_name && <div className="text-xs text-slate-400">{c.name}</div>}
+{contract && <div className="text-xs text-slate-500 font-medium">{contract.contract_number}</div>}
+{contract && (
+  <div className="flex gap-1 mt-1">
+    {[1,2,3].map(m => {
+      const mStart = new Date(contract[`month${m}_start`] + 'T00:00:00')
+      const mEnd = new Date(contract[`month${m}_end`] + 'T23:59:59')
+      const isCurrentM = new Date() >= mStart && new Date() <= mEnd
+      const isSelected = (selectedContractMonth[c.id] || contractMonth || 1) === m
+      return (
+        <button key={m} onClick={() => setSelectedContractMonth(prev => ({ ...prev, [c.id]: m }))}
+          className={`text-xs px-2 py-0.5 rounded-full border transition-all ${isSelected ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-200 text-slate-500 hover:border-blue-300'}`}>
+          Mes {m}/3 {isCurrentM ? '●' : ''}
+        </button>
+      )
+    })}
+  </div>
+)}
+<div className="text-xs text-slate-400 mt-1">
+  {contract ? `${new Date(contract[`month${selectedContractMonth[c.id] || contractMonth || 1}_start`] + 'T12:00:00').toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })} → ${new Date(contract[`month${selectedContractMonth[c.id] || contractMonth || 1}_end`] + 'T12:00:00').toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}` : `Vigencia hasta ${end.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })} · ${dl}d restantes`}
+</div>
                     </div>
                     <div className="ml-auto text-right flex flex-col items-end gap-2">
   <button onClick={() => printClientBilling(c)} className="text-xs border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 flex items-center gap-1">
