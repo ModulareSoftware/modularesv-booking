@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
       deposit_amount: deposit_amount || 0,
       deposit_status: deposit_status || 'pendiente',
       deposit_date: deposit_date || null,
-      auth_user_id: authUser.user.id,
+      auth_user_id: authUserId,
     })
     .select()
     .single()
