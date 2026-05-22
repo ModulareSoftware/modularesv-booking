@@ -219,6 +219,101 @@ async function editReservation(id: string, date: string, slot: string) {
     await fetch(`/api/clients/${id}`, { method: 'DELETE', headers: authHeaders() })
     loadData()
   }
+  function printClientBilling(c: Client) {
+  const pkg = PACKAGES[c.package]
+  const b = getClientBilling(c)
+  const end = getVigencyEnd(c.start_date)
+  const billingMonth = getCurrentBillingMonth(c)
+  const pkgStatus = billingMonth?.package_status || 'pendiente'
+  const extraRes = getExtraReservations(c)
+  const today = new Date().toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Facturación — ${displayName(c)}</title>
+  <style>
+    body { font-family: sans-serif; padding: 40px; color: #1e293b; font-size: 14px; }
+    h1 { font-size: 22px; margin-bottom: 4px; }
+    .sub { color: #64748b; font-size: 13px; margin-bottom: 24px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th { background: #f8fafc; text-align: left; padding: 8px 12px; font-size: 12px; color: #94a3b8; border-bottom: 1px solid #e2e8f0; }
+    td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+    .right { text-align: right; }
+    .total-row td { font-weight: 700; background: #f8fafc; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; }
+    .pagado { background: #f0fdf4; color: #16a34a; }
+    .pendiente { background: #fffbeb; color: #d97706; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; }
+    .logo { font-size: 18px; font-weight: 700; color: #1e293b; }
+    .date { color: #94a3b8; font-size: 12px; }
+    hr { border: none; border-top: 1px solid #e2e8f0; margin: 20px 0; }
+    .footer { margin-top: 40px; color: #94a3b8; font-size: 11px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">Modulare Flex Office</div>
+    <div class="date">Emitido: ${today}</div>
+  </div>
+  <hr/>
+  <h1>${displayName(c)}</h1>
+  <div class="sub">
+    Paquete ${pkg.label} · Vigencia hasta ${end.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Concepto</th>
+        <th class="right">Neto</th>
+        <th class="right">IVA 13%</th>
+        <th class="right">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>
+          Paquete ${pkg.label} (${pkg.blocks} bloques)
+          <br/><span class="badge ${pkgStatus === 'pagado' ? 'pagado' : 'pendiente'}">${pkgStatus === 'pagado' ? '✓ Pagado' : '⏳ Pendiente'}</span>
+        </td>
+        <td class="right">$${b.baseNeto.toFixed(2)}</td>
+        <td class="right">$${b.baseIva.toFixed(2)}</td>
+        <td class="right">$${(b.baseNeto + b.baseIva).toFixed(2)}</td>
+      </tr>
+      ${b.nights > 0 ? `<tr>
+        <td>Noches extra (${b.nights} × $${c.night_price.toFixed(2)})</td>
+        <td class="right">$${b.nightNeto.toFixed(2)}</td>
+        <td class="right">$${b.nightIva.toFixed(2)}</td>
+        <td class="right">$${(b.nightNeto + b.nightIva).toFixed(2)}</td>
+      </tr>` : ''}
+      ${b.sundays > 0 ? `<tr>
+        <td>Domingos (${b.sundays} × $${(c.sunday_price || 25).toFixed(2)})</td>
+        <td class="right">$${b.sundayNeto.toFixed(2)}</td>
+        <td class="right">$${b.sundayIva.toFixed(2)}</td>
+        <td class="right">$${(b.sundayNeto + b.sundayIva).toFixed(2)}</td>
+      </tr>` : ''}
+      ${b.extraBlocks > 0 ? `<tr>
+        <td>Bloques extra (${b.extraBlocks} × $${b.extraBlockPrice.toFixed(2)})</td>
+        <td class="right">$${b.extraBlockNeto.toFixed(2)}</td>
+        <td class="right">$${b.extraBlockIva.toFixed(2)}</td>
+        <td class="right">$${(b.extraBlockNeto + b.extraBlockIva).toFixed(2)}</td>
+      </tr>` : ''}
+      <tr class="total-row">
+        <td>Total</td>
+        <td class="right">$${b.totalNeto.toFixed(2)}</td>
+        <td class="right">$${b.totalIva.toFixed(2)}</td>
+        <td class="right">$${b.totalConIva.toFixed(2)}</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="footer">Este documento es informativo. Modulare Flex Office.</div>
+</body>
+</html>`
+
+  const win = window.open('', '_blank')
+  if (win) { win.document.write(html); win.document.close(); win.print() }
+}
 
   const slotColors: Record<string, string> = {
     morning: 'bg-blue-50 border-blue-300 text-blue-800',
@@ -556,10 +651,13 @@ const extraBlockPrice = (c as any).extra_block_price || 25
                       {c.company_name && <div className="text-xs text-slate-400">{c.name}</div>}
                       <div className="text-xs text-slate-400">Vigencia hasta {end.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })} · {dl}d restantes</div>
                     </div>
-                    <div className="ml-auto text-right">
-                      <div className="text-xs text-slate-400">Total con IVA</div>
-                      <div className="text-xl font-semibold text-blue-600">{fmt$(b.totalConIva)}</div>
-                    </div>
+                    <div className="ml-auto text-right flex flex-col items-end gap-2">
+  <button onClick={() => printClientBilling(c)} className="text-xs border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 flex items-center gap-1">
+    🖨️ Imprimir / PDF
+  </button>
+  <div className="text-xs text-slate-400">Total con IVA</div>
+  <div className="text-xl font-semibold text-blue-600">{fmt$(b.totalConIva)}</div>
+</div>
                   </div>
 
                   {/* Desglose */}
