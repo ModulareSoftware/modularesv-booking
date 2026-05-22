@@ -731,7 +731,13 @@ const billingMonth = billingMonths.find(b =>
 ) || getCurrentBillingMonth(c)
 
 const pkgStatus = billingMonth?.package_status || 'pendiente'
-const extraRes = getExtraReservations(c)
+const extraRes = getExtraReservations(c).filter(r => {
+  if (!contract) return true
+  const rd = new Date(r.date + 'T12:00:00')
+  const mStart = new Date(contract[`month${selectedMonth}_start`] + 'T00:00:00')
+  const mEnd = new Date(contract[`month${selectedMonth}_end`] + 'T23:59:59')
+  return rd >= mStart && rd <= mEnd
+})
 const pendingExtras = extraRes.filter(r => r.chargeStatus === 'por_cobrar').length
 
               return (
