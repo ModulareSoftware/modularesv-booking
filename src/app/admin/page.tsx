@@ -264,6 +264,7 @@ const pkgStatus = billingMonth?.package_status || 'pendiente'
   const mEnd = new Date(contract[`month${selectedMonth}_end`] + 'T23:59:59')
   return rd >= mStart && rd <= mEnd
 })
+    
   const today = new Date().toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
   const html = `<!DOCTYPE html>
