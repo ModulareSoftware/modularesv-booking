@@ -19,14 +19,15 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { client_id, month_start, month_end, package_status } = body
-
+  const { client_id, month_start, month_end, package_status, contract_month } = body
   const { data, error } = await supabase
     .from('billing_months')
-    .upsert({ client_id, month_start, month_end, package_status }, { onConflict: 'client_id,month_start' })
+    .upsert(
+      { client_id, month_start, month_end, package_status, contract_month: contract_month || 1 },
+      { onConflict: 'client_id,month_start' }
+    )
     .select()
     .single()
-
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
 }
