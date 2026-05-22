@@ -172,10 +172,13 @@ setContracts(await conRes.json())
     )
   }
 
-  async function togglePackageStatus(c: Client) {
-    const current = getCurrentBillingMonth(c)
-    const start = new Date(c.start_date)
-    const end = getVigencyEnd(c.start_date)
+  async function togglePackageStatus(c: Client, monthNum: number) {
+    const contract = contracts.find(ct => ct.client_id === c.id && ct.status === 'active')
+    const monthKey = `month${monthNum}`
+    const monthStart = contract ? contract[`${monthKey}_start`] : fmtDate(new Date(c.start_date))
+    const monthEnd = contract ? contract[`${monthKey}_end`] : fmtDate(getVigencyEnd(c.start_date))
+    
+    const current = billingMonths.find(b => b.client_id === c.id && b.month_start === monthStart)
     const newStatus = current?.package_status === 'pagado' ? 'pendiente' : 'pagado'
 
     await fetch('/api/billing', {
@@ -183,9 +186,10 @@ setContracts(await conRes.json())
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         client_id: c.id,
-        month_start: fmtDate(start),
-        month_end: fmtDate(end),
+        month_start: monthStart,
+        month_end: monthEnd,
         package_status: newStatus,
+        contract_month: monthNum,
       }),
     })
     await loadData()
@@ -249,8 +253,10 @@ const currentMonth = contract ? (
 const selectedMonth = selectedContractMonth[c.id] || currentMonth
 const b = getClientBilling(c, selectedMonth)
   const end = getVigencyEnd(c.start_date)
-  const billingMonth = getCurrentBillingMonth(c)
-  const pkgStatus = billingMonth?.package_status || 'pendiente'
+  const contract = contracts.find(ct => ct.client_id === c.id && ct.status === 'active')
+const monthKeyStatus = contract ? contract[`month${selectedMonth}_start`] : null
+const billingMonth = billingMonths.find(b => b.client_id === c.id && b.month_start === monthKeyStatus) || getCurrentBillingMonth(c)
+const pkgStatus = billingMonth?.package_status || 'pendiente'
   const extraRes = getExtraReservations(c)
   const today = new Date().toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
@@ -736,7 +742,7 @@ const pendingExtras = extraRes.filter(r => r.chargeStatus === 'por_cobrar').leng
                       <div className="col-span-2">
                         <span className="text-slate-600">Paquete {pkg.label}</span>
                         <span className="text-xs text-slate-400 block">{pkg.blocks} bloques</span>
-                        <button onClick={() => togglePackageStatus(c)}
+                        <button onClick={() => togglePackageStatus(c, selectedMonth)}
                           className={`mt-1 text-xs px-2 py-0.5 rounded-full font-medium cursor-pointer transition-all ${pkgStatus === 'pagado' ? 'bg-green-50 text-green-600 hover:bg-green-100' : 'bg-amber-50 text-amber-600 hover:bg-amber-100'}`}>
                           {pkgStatus === 'pagado' ? '✓ Pagado' : '⏳ Pendiente'} — clic para cambiar
                         </button>
