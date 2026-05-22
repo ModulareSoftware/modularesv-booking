@@ -240,7 +240,7 @@ async function editReservation(id: string, date: string, slot: string) {
   function printClientBilling(c: Client) {
   const pkg = PACKAGES[c.package]
   const contract = contracts.find(ct => ct.client_id === c.id && ct.status === 'active')
-const selectedMonth = selectedContractMonth[c.id] || contractMonth || 1
+const selectedMonth = selectedContractMonth[c.id] || currentMonth
 const b = getClientBilling(c, selectedMonth)
   const end = getVigencyEnd(c.start_date)
   const billingMonth = getCurrentBillingMonth(c)
