@@ -342,13 +342,35 @@ const pkgStatus = billingMonth?.package_status || 'pendiente'
   <td class="right">$${(b.nightNeto + b.nightIva).toFixed(2)}</td>
 </tr>` : ''}
       ${b.sundays > 0 ? `<tr>
-        <td>Domingos (${b.sundays} × $${(c.sunday_price || 25).toFixed(2)})</td>
+  <td>
+    Domingos (${b.sundays} × $${(c.sunday_price || 25).toFixed(2)})
+    <div style="margin-top:6px;">
+      ${extraRes.filter(r => isSunday(r.date)).map(r =>
+        '<div style="font-size:11px; color:#64748b; display:flex; justify-content:space-between; padding:2px 0;">' +
+        '<span>' + new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit' }) + '</span>' +
+        '<span style="color:' + (r.chargeStatus === 'cobrado' ? '#16a34a' : r.chargeStatus === 'por_cobrar' ? '#d97706' : '#94a3b8') + '">' +
+        (r.chargeStatus === 'cobrado' ? '✓ Cobrado' : r.chargeStatus === 'por_cobrar' ? '⏳ Por cobrar' : '🔒 Programado') +
+        '</span></div>'
+      ).join('')}
+    </div>
+  </td>
         <td class="right">$${b.sundayNeto.toFixed(2)}</td>
         <td class="right">$${b.sundayIva.toFixed(2)}</td>
         <td class="right">$${(b.sundayNeto + b.sundayIva).toFixed(2)}</td>
       </tr>` : ''}
       ${b.extraBlocks > 0 ? `<tr>
-        <td>Bloques extra (${b.extraBlocks} × $${b.extraBlockPrice.toFixed(2)})</td>
+  <td>
+    Bloques extra (${b.extraBlocks} × $${b.extraBlockPrice.toFixed(2)})
+    <div style="margin-top:6px;">
+      ${extraRes.filter(r => !isSunday(r.date) && r.slot !== 'night').map(r =>
+        '<div style="font-size:11px; color:#64748b; display:flex; justify-content:space-between; padding:2px 0;">' +
+        '<span>' + new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit' }) + '</span>' +
+        '<span style="color:' + ((r as any).charge_status === 'cobrado' ? '#16a34a' : (r as any).charge_status === 'por_cobrar' ? '#d97706' : '#94a3b8') + '">' +
+        ((r as any).charge_status === 'cobrado' ? '✓ Cobrado' : (r as any).charge_status === 'por_cobrar' ? '⏳ Por cobrar' : '🔒 Programado') +
+        '</span></div>'
+      ).join('')}
+    </div>
+  </td>
         <td class="right">$${b.extraBlockNeto.toFixed(2)}</td>
         <td class="right">$${b.extraBlockIva.toFixed(2)}</td>
         <td class="right">$${(b.extraBlockNeto + b.extraBlockIva).toFixed(2)}</td>
