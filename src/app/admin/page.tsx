@@ -506,6 +506,13 @@ async function editReservation(id: string, date: string, slot: string) {
 const remaining = Math.max(0, rawRemaining)
 const extraBlocksCount = rawRemaining < 0 ? Math.abs(rawRemaining) : 0
 const extraBlockPrice = (c as any).extra_block_price || 25
+const contract = contracts.find(ct => ct.client_id === c.id && ct.status === 'active')
+const today2 = new Date()
+const contractMonth = contract ? (
+  today2 >= new Date(contract.month1_start) && today2 <= new Date(contract.month1_end + 'T23:59:59') ? 1 :
+  today2 >= new Date(contract.month2_start) && today2 <= new Date(contract.month2_end + 'T23:59:59') ? 2 :
+  today2 >= new Date(contract.month3_start) && today2 <= new Date(contract.month3_end + 'T23:59:59') ? 3 : null
+) : null
                 const pct = Math.round((used / total) * 100)
                 const dl = daysLeft(c.start_date)
                 const end = getVigencyEnd(c.start_date)
@@ -521,7 +528,9 @@ const extraBlockPrice = (c as any).extra_block_price || 25
                         <span className="font-medium text-sm">{displayName(c)}</span>
                         {c.company_name && <span className="text-xs text-slate-400">({c.name})</span>}
                         <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">{pkg.label}</span>
-                        {dl <= 5 && <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">⚠️ {dl}d</span>}
+{contract && <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">{contract.contract_number}</span>}
+{contractMonth && <span className="text-xs bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full">Mes {contractMonth}/3</span>}
+{dl <= 5 && <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">⚠️ {dl}d</span>}
                       </div>
                       <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-2 flex-wrap">
                         <span>{used}/{total} bloques · vence {end.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
