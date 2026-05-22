@@ -253,8 +253,8 @@ const currentMonth = contract ? (
 const selectedMonth = selectedContractMonth[c.id] || currentMonth
 const b = getClientBilling(c, selectedMonth)
   const end = getVigencyEnd(c.start_date)
-  const contract = contracts.find(ct => ct.client_id === c.id && ct.status === 'active')
-const monthKeyStatus = contract ? contract[`month${selectedMonth}_start`] : null
+  const contractForStatus = contracts.find(ct => ct.client_id === c.id && ct.status === 'active')
+const monthKeyStatus = contractForStatus ? contractForStatus[`month${selectedMonth}_start`] : null
 const billingMonth = billingMonths.find(b => b.client_id === c.id && b.month_start === monthKeyStatus) || getCurrentBillingMonth(c)
 const pkgStatus = billingMonth?.package_status || 'pendiente'
   const extraRes = getExtraReservations(c)
