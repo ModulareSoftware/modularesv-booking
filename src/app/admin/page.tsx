@@ -115,9 +115,23 @@ setContracts(await conRes.json())
     return { used, nights, sundays, total, remaining: total - used }
   }
 
-  function getClientBilling(c: Client) {
+  function getClientBilling(c: Client, monthNum?: number) {
     const pkg = PACKAGES[c.package]
-    const clientRes = billingReservations(c.id)
+    const contract = contracts.find(ct => ct.client_id === c.id && ct.status === 'active')
+    
+    let clientRes = billingReservations(c.id)
+    
+    // Filtrar por mes del contrato si se especifica
+    if (contract && monthNum) {
+      const monthKey = `month${monthNum}`
+      const mStart = new Date(contract[`${monthKey}_start`] + 'T00:00:00')
+      const mEnd = new Date(contract[`${monthKey}_end`] + 'T23:59:59')
+      clientRes = clientRes.filter(r => {
+        const rd = new Date(r.date + 'T12:00:00')
+        return rd >= mStart && rd <= mEnd
+      })
+    }
+
     const nights = clientRes.filter(r => r.slot === 'night' && !isSunday(r.date)).length
     const sundays = clientRes.filter(r => isSunday(r.date)).length
     const usedQuota = clientRes.filter(r => countsAgainstQuota(r.date, r.slot)).length
