@@ -39,6 +39,7 @@ const [editingRes, setEditingRes] = useState<Reservation | null>(null)
   const [filterClient, setFilterClient] = useState('')
   const [billingClient, setBillingClient] = useState('')
   const [billingVigency, setBillingVigency] = useState('')
+const [selectedContractMonth, setSelectedContractMonth] = useState<Record<string, number>>({})
   const [alert, setAlert] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null)
 const [contracts, setContracts] = useState<any[]>([])
 
