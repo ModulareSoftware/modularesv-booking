@@ -919,6 +919,20 @@ function EditClientModal({ client, onClose, onSave }: { client: Client; onClose:
         {form.password && <button onClick={copyPassword} className={`px-3 py-2 text-xs rounded-lg border ${copied ? 'bg-green-50 text-green-600 border-green-200' : 'border-slate-200 hover:bg-slate-50'}`}>{copied ? '✓ Copiado' : 'Copiar'}</button>}
       </div>
       <p className="text-xs text-slate-400 mb-3">Si generas una nueva contraseña, compártela con el cliente.</p>
+      <div className="grid grid-cols-2 gap-3 mb-3">
+  <div>
+    <label className="text-xs text-slate-500">Paquete</label>
+    <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" value={form.package} onChange={e => { set('package', e.target.value); set('deposit_amount', PACKAGES[e.target.value as keyof typeof PACKAGES].price * 0.5) }}>
+      <option value="premium">🥇 Premium — 10 bloques</option>
+      <option value="basic">🥈 Básico — 6 bloques</option>
+      <option value="lite">🥉 Lite — 3 bloques</option>
+    </select>
+  </div>
+  <div>
+    <label className="text-xs text-slate-500">Inicio vigencia</label>
+    <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.start_date} onChange={e => set('start_date', e.target.value)} />
+  </div>
+</div>
       <div className="grid grid-cols-3 gap-3 mb-3">
   <div>
     <label className="text-xs text-slate-500">Precio noche extra ($)</label>
