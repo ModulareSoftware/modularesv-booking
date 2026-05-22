@@ -264,6 +264,12 @@ const pkgStatus = billingMonth?.package_status || 'pendiente'
   const mEnd = new Date(contract[`month${selectedMonth}_end`] + 'T23:59:59')
   return rd >= mStart && rd <= mEnd
 })
+  if (!contract) return true
+  const rd = new Date(r.date + 'T12:00:00')
+  const mStart = new Date(contract[`month${selectedMonth}_start`] + 'T00:00:00')
+  const mEnd = new Date(contract[`month${selectedMonth}_end`] + 'T23:59:59')
+  return rd >= mStart && rd <= mEnd
+})
   const today = new Date().toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
   const html = `<!DOCTYPE html>
@@ -864,7 +870,14 @@ const pendingExtras = extraRes.filter(r => r.chargeStatus === 'por_cobrar').leng
       <span className="text-right font-medium">{fmt$(b.extraBlockNeto + b.extraBlockIva)}</span>
     </div>
     <div className="px-3 pb-2 space-y-1">
-      {billingReservations(c.id).filter(r => countsAgainstQuota(r.date, r.slot)).slice(PACKAGES[c.package].blocks).map(r => (
+      {billingReservations(c.id).filter(r => {
+        if (!countsAgainstQuota(r.date, r.slot)) return false
+        if (!contract) return true
+        const rd = new Date(r.date + 'T12:00:00')
+        const mStart = new Date(contract[`month${selectedMonth}_start`] + 'T00:00:00')
+        const mEnd = new Date(contract[`month${selectedMonth}_end`] + 'T23:59:59')
+        return rd >= mStart && rd <= mEnd
+      }).slice(PACKAGES[c.package].blocks).map(r => (
         <div key={r.id} className="flex items-center gap-2 text-xs">
           <span className="text-slate-400">{new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit' })}</span>
           <span className="flex-1" />
