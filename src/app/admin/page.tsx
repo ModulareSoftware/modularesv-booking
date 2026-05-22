@@ -292,8 +292,12 @@ const pkgStatus = billingMonth?.package_status || 'pendiente'
   <hr/>
   <h1>${displayName(c)}</h1>
   <div class="sub">
-    Paquete ${pkg.label} · Vigencia hasta ${end.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-  </div>
+  Paquete ${pkg.label}${contract ? ` · ${contract.contract_number} · Mes ${selectedMonth}/3` : ''}<br/>
+  ${contract 
+    ? `${new Date(contract[`month${selectedMonth}_start`] + 'T12:00:00').toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })} → ${new Date(contract[`month${selectedMonth}_end`] + 'T12:00:00').toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}`
+    : `Vigencia hasta ${end.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}`
+  }
+</div>
   <table>
     <thead>
       <tr>
@@ -314,7 +318,23 @@ const pkgStatus = billingMonth?.package_status || 'pendiente'
         <td class="right">$${(b.baseNeto + b.baseIva).toFixed(2)}</td>
       </tr>
       ${b.nights > 0 ? `<tr>
-        <td>Noches extra (${b.nights} × $${c.night_price.toFixed(2)})</td>
+  <td>
+    Noches extra (${b.nights} × $${c.night_price.toFixed(2)})
+    <div style="margin-top:6px;">
+      ${extraRes.filter(r => r.slot === 'night' && !isSunday(r.date)).map(r => `
+        <div style="font-size:11px; color:#64748b; display:flex; justify-content:space-between; padding:2px 0;">
+          <span>${new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit' })}</span>
+          <span style="color:${r.chargeStatus === 'cobrado' ? '#16a34a' : r.chargeStatus === 'por_cobrar' ? '#d97706' : '#94a3b8'}">
+            ${r.chargeStatus === 'cobrado' ? '✓ Cobrado' : r.chargeStatus === 'por_cobrar' ? '⏳ Por cobrar' : '🔒 Programado'}
+          </span>
+        </div>
+      `).join('')}
+    </div>
+  </td>
+  <td class="right">$${b.nightNeto.toFixed(2)}</td>
+  <td class="right">$${b.nightIva.toFixed(2)}</td>
+  <td class="right">$${(b.nightNeto + b.nightIva).toFixed(2)}</td>
+</tr>` : ''}
         <td class="right">$${b.nightNeto.toFixed(2)}</td>
         <td class="right">$${b.nightIva.toFixed(2)}</td>
         <td class="right">$${(b.nightNeto + b.nightIva).toFixed(2)}</td>
