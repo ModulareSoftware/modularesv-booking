@@ -747,7 +747,7 @@ const pendingExtras = extraRes.filter(r => r.chargeStatus === 'por_cobrar').leng
                     </div>
 
                     {/* Noches extra con estado individual */}
-                    {extraRes.filter(r => r.slot === 'night' && !isSunday(r.date)).length > 0 && (
+                    {b.nightNeto > 0 && (
                       <div className="border-b border-slate-50">
                         <div className="grid grid-cols-5 px-3 py-2 text-sm items-start">
                           <div className="col-span-2">
@@ -778,7 +778,7 @@ const pendingExtras = extraRes.filter(r => r.chargeStatus === 'por_cobrar').leng
                     )}
 
                     {/* Domingos con estado individual */}
-                    {extraRes.filter(r => isSunday(r.date)).length > 0 && (
+                    {b.sundayNeto > 0 && (
                       <div className="border-b border-slate-50">
                         <div className="grid grid-cols-5 px-3 py-2 text-sm items-start">
                           <div className="col-span-2">
