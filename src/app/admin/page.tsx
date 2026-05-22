@@ -699,7 +699,7 @@ const pendingExtras = extraRes.filter(r => r.chargeStatus === 'por_cobrar').leng
       const mStart = new Date(contract[`month${m}_start`] + 'T00:00:00')
       const mEnd = new Date(contract[`month${m}_end`] + 'T23:59:59')
       const isCurrentM = new Date() >= mStart && new Date() <= mEnd
-      const isSelected = (selectedContractMonth[c.id] || contractMonth || 1) === m
+      const isSelected = (selectedContractMonth[c.id] || currentMonth) === m
       return (
         <button key={m} onClick={() => setSelectedContractMonth(prev => ({ ...prev, [c.id]: m }))}
           className={`text-xs px-2 py-0.5 rounded-full border transition-all ${isSelected ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-200 text-slate-500 hover:border-blue-300'}`}>
