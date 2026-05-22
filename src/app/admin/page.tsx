@@ -684,7 +684,14 @@ const pkg = PACKAGES[c.package]
 const dl = daysLeft(c.start_date)
 const end = getVigencyEnd(c.start_date)
 const depStatus = DEPOSIT_STATUS[c.deposit_status]
-const billingMonth = getCurrentBillingMonth(c)
+const selectedMonthStart = contract 
+  ? contract[`month${selectedMonth}_start`] 
+  : null
+
+const billingMonth = billingMonths.find(b => 
+  b.client_id === c.id && b.month_start === selectedMonthStart
+) || getCurrentBillingMonth(c)
+
 const pkgStatus = billingMonth?.package_status || 'pendiente'
 const extraRes = getExtraReservations(c)
 const pendingExtras = extraRes.filter(r => r.chargeStatus === 'por_cobrar').length
