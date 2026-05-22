@@ -257,7 +257,13 @@ const b = getClientBilling(c, selectedMonth)
 const monthKeyStatus = contractForStatus ? contractForStatus[`month${selectedMonth}_start`] : null
 const billingMonth = billingMonths.find(b => b.client_id === c.id && b.month_start === monthKeyStatus) || getCurrentBillingMonth(c)
 const pkgStatus = billingMonth?.package_status || 'pendiente'
-  const extraRes = getExtraReservations(c)
+  const extraRes = getExtraReservations(c).filter(r => {
+  if (!contract) return true
+  const rd = new Date(r.date + 'T12:00:00')
+  const mStart = new Date(contract[`month${selectedMonth}_start`] + 'T00:00:00')
+  const mEnd = new Date(contract[`month${selectedMonth}_end`] + 'T23:59:59')
+  return rd >= mStart && rd <= mEnd
+})
   const today = new Date().toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
   const html = `<!DOCTYPE html>
