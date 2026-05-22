@@ -659,15 +659,23 @@ const contractMonth = contract ? (
             </div>
 
             {billingClients.map(c => {
-              const b = getClientBilling(c)
-              const pkg = PACKAGES[c.package]
-              const dl = daysLeft(c.start_date)
-              const end = getVigencyEnd(c.start_date)
-              const depStatus = DEPOSIT_STATUS[c.deposit_status]
-              const billingMonth = getCurrentBillingMonth(c)
-              const pkgStatus = billingMonth?.package_status || 'pendiente'
-              const extraRes = getExtraReservations(c)
-              const pendingExtras = extraRes.filter(r => r.chargeStatus === 'por_cobrar').length
+              const contract = contracts.find(ct => ct.client_id === c.id && ct.status === 'active')
+const today3 = new Date()
+const currentMonth = contract ? (
+  today3 >= new Date(contract.month1_start) && today3 <= new Date(contract.month1_end + 'T23:59:59') ? 1 :
+  today3 >= new Date(contract.month2_start) && today3 <= new Date(contract.month2_end + 'T23:59:59') ? 2 :
+  today3 >= new Date(contract.month3_start) && today3 <= new Date(contract.month3_end + 'T23:59:59') ? 3 : 1
+) : 1
+const selectedMonth = selectedContractMonth[c.id] || currentMonth
+const b = getClientBilling(c, selectedMonth)
+const pkg = PACKAGES[c.package]
+const dl = daysLeft(c.start_date)
+const end = getVigencyEnd(c.start_date)
+const depStatus = DEPOSIT_STATUS[c.deposit_status]
+const billingMonth = getCurrentBillingMonth(c)
+const pkgStatus = billingMonth?.package_status || 'pendiente'
+const extraRes = getExtraReservations(c)
+const pendingExtras = extraRes.filter(r => r.chargeStatus === 'por_cobrar').length
 
               return (
                 <div key={c.id} className="bg-white rounded-2xl border border-slate-200 p-4">
