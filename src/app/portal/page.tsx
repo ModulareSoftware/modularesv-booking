@@ -51,7 +51,7 @@ export default function PortalPage() {
     setReservations(await resRes.json())
     setAllReservations(await allResRes.json())
     const bills = await billRes.json()
-setBillingMonth(bills)
+setBillingMonths(bills)
     const cons = await conRes.json()
     if (cons.length > 0) {
       const activeContract = cons.find((c: any) => c.status === 'active')
