@@ -223,7 +223,7 @@ export default function PortalPage() {
               {contract && <div className="text-xs text-slate-500 font-medium mt-0.5">{contract.contract_number}</div>}
             </div>
             <span className={`text-xs px-2 py-1 rounded-full font-medium ${dl <= 5 ? 'bg-amber-50 text-amber-600' : 'bg-blue-50 text-blue-600'}`}>
-              {dl}d restantes
+              {dl}d restantes<br/><span className="text-xs font-normal">periodo en curso</span>
             </span>
           </div>
 
