@@ -305,7 +305,13 @@ export default function PortalPage() {
               <h3 className="font-semibold text-slate-700 mb-3">Mis reservas</h3>
               {reservations.length === 0 && <p className="text-slate-400 text-sm text-center py-4">Sin reservas activas</p>}
               <div className="space-y-2">
-                {reservations.sort((a, b) => a.date.localeCompare(b.date)).map(r => {
+                {reservations.filter(r => {
+  if (!contract) return true
+  const rd = new Date(r.date + 'T12:00:00')
+  const mStart = new Date(contract[`month${selectedContractMonth}_start`] + 'T00:00:00')
+  const mEnd = new Date(contract[`month${selectedContractMonth}_end`] + 'T23:59:59')
+  return rd >= mStart && rd <= mEnd
+}).sort((a, b) => a.date.localeCompare(b.date)).map(r => {
                   const slotInfo = SLOTS[r.slot as keyof typeof SLOTS]
                   const isPast = new Date(r.date + 'T23:59:00') < new Date()
                   const isDom = isSunday(r.date)
@@ -317,6 +323,18 @@ export default function PortalPage() {
                       <div className="flex-1 text-sm">
                         <span className="font-medium">{new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
                         <span className="text-slate-400"> · {slotInfo.label}</span>
+                        {contract && (() => {
+  const rd = new Date(r.date + 'T12:00:00')
+  for (const m of [1,2,3]) {
+    const ms = new Date(contract[`month${m}_start`] + 'T00:00:00')
+    const me = new Date(contract[`month${m}_end`] + 'T23:59:59')
+    if (rd >= ms && rd <= me) {
+      const colors = ['bg-blue-50 text-blue-600', 'bg-green-50 text-green-600', 'bg-purple-50 text-purple-600']
+      return <span className={`ml-1 text-xs px-1.5 py-0.5 rounded font-medium ${colors[m-1]}`}>0{m}/3</span>
+    }
+  }
+  return null
+})()}
                         {isDom && <span className="ml-1 text-xs text-purple-600">· dom</span>}
                         {extraCost > 0 && <span className="ml-2 text-xs text-amber-600">+{fmt$(extraCost)}</span>}
                         {isPast && <span className="ml-2 text-xs text-slate-300">pasado</span>}
