@@ -778,6 +778,57 @@ const contractMonth = contract ? (
                     <option value="active">Vigencia activa</option>
                     <option value="expired">Vigencia vencida</option>
                   </select>
+                 <button onClick={() => {
+                const rows = billingClients.map(c => {
+                  const contract = contracts.find((ct: any) => ct.client_id === c.id && ct.status === 'active')
+                  const today3 = new Date()
+                  const currentMonth = contract ? (
+                    today3 >= new Date(contract.month1_start) && today3 <= new Date(contract.month1_end + 'T23:59:59') ? 1 :
+                    today3 >= new Date(contract.month2_start) && today3 <= new Date(contract.month2_end + 'T23:59:59') ? 2 :
+                    today3 >= new Date(contract.month3_start) && today3 <= new Date(contract.month3_end + 'T23:59:59') ? 3 : 1
+                  ) : 1
+                  const selectedMonth = selectedContractMonth[c.id] || currentMonth
+                  const b = getClientBilling(c, selectedMonth)
+                  const pkg = PACKAGES[c.package]
+                  const selectedMonthStart = contract ? contract[`month${selectedMonth}_start`] : null
+                  const selectedMonthEnd = contract ? contract[`month${selectedMonth}_end`] : null
+                  const billingMonth = billingMonths.find(bm => bm.client_id === c.id && bm.month_start === selectedMonthStart) || getCurrentBillingMonth(c)
+                  const pkgStatus = billingMonth?.package_status || 'pendiente'
+                  const periodo = selectedMonthStart && selectedMonthEnd
+                    ? `${selectedMonthStart} → ${selectedMonthEnd}`
+                    : ''
+                  return [
+                    c.name || '',
+                    c.company_name || '',
+                    contract?.contract_number || '',
+                    periodo,
+                    pkg.label,
+                    pkgStatus,
+                    b.baseNeto.toFixed(2),
+                    b.baseIva.toFixed(2),
+                    b.nights,
+                    b.nightNeto.toFixed(2),
+                    b.sundays,
+                    b.sundayNeto.toFixed(2),
+                    b.extraBlocks,
+                    b.extraBlockNeto.toFixed(2),
+                    b.totalNeto.toFixed(2),
+                    b.totalIva.toFixed(2),
+                    b.totalConIva.toFixed(2),
+                  ]
+                })
+                const headers = ['Nombre','Empresa','Contrato','Periodo','Paquete','Estado Paquete','Neto Base','IVA Base','Noches Extra','Neto Noches','Domingos','Neto Domingos','Bloques Extra','Neto Extras','Total Neto','IVA Total','Total con IVA']
+                const csv = [headers, ...rows].map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+                const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `facturacion_${new Date().toISOString().slice(0,10)}.csv`
+                a.click()
+                URL.revokeObjectURL(url)
+              }} className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 flex items-center gap-1">
+                📊 Exportar CSV
+              </button>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3 mt-4">
