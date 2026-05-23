@@ -642,7 +642,12 @@ const contractMonth = contract ? (
             <div className="flex items-center gap-3 mb-4 flex-wrap">
               <h2 className="font-semibold text-slate-700 mr-auto">Todas las reservas</h2>
 <button onClick={() => {
-  const filtered = reservations.filter(r => !filterClient || r.client_id === filterClient).sort((a, b) => a.date.localeCompare(b.date))
+  const filtered = reservations.filter(r => {
+  if (filterClient && r.client_id !== filterClient) return false
+  if (filterYear && !r.date.startsWith(filterYear)) return false
+  if (filterMonth && r.date.slice(5, 7) !== filterMonth) return false
+  return true
+}).sort((a, b) => a.date.localeCompare(b.date))
   const rows = filtered.map(r => {
     const c = clients.find(x => x.id === r.client_id)
     const contract = contracts.find((ct: any) => ct.client_id === r.client_id && ct.status === 'active')
