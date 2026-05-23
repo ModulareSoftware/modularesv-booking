@@ -13,6 +13,8 @@ export default function PortalPage() {
   const [reservations, setReservations] = useState<Reservation[]>([])
   const [allReservations, setAllReservations] = useState<Reservation[]>([])
   const [billingMonth, setBillingMonth] = useState<any>(null)
+  const [contract, setContract] = useState<any>(null)
+  const [selectedContractMonth, setSelectedContractMonth] = useState<number>(1)
   const [date, setDate] = useState(fmtDate(new Date()))
   const [slot, setSlot] = useState('morning')
   const [alert, setAlert] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null)
@@ -40,15 +42,29 @@ export default function PortalPage() {
   }, [router])
 
   async function loadClientData(clientId: string) {
-    const [resRes, allResRes, billRes] = await Promise.all([
+    const [resRes, allResRes, billRes, conRes] = await Promise.all([
       fetch(`/api/reservations?client_id=${clientId}`),
       fetch(`/api/reservations`),
       fetch(`/api/billing?client_id=${clientId}`),
+      fetch(`/api/contracts?client_id=${clientId}`),
     ])
     setReservations(await resRes.json())
     setAllReservations(await allResRes.json())
     const bills = await billRes.json()
     if (bills.length > 0) setBillingMonth(bills[0])
+    const cons = await conRes.json()
+    if (cons.length > 0) {
+      const activeContract = cons.find((c: any) => c.status === 'active')
+      if (activeContract) {
+        setContract(activeContract)
+        const today = new Date()
+        const currentMonth =
+          today >= new Date(activeContract.month1_start) && today <= new Date(activeContract.month1_end + 'T23:59:59') ? 1 :
+          today >= new Date(activeContract.month2_start) && today <= new Date(activeContract.month2_end + 'T23:59:59') ? 2 :
+          today >= new Date(activeContract.month3_start) && today <= new Date(activeContract.month3_end + 'T23:59:59') ? 3 : 1
+        setSelectedContractMonth(currentMonth)
+      }
+    }
   }
 
   async function logout() {
@@ -72,19 +88,19 @@ export default function PortalPage() {
   }
 
   async function cancelReservation(id: string, date: string) {
-  const resDate = new Date(date + 'T00:00:00')
-  const hoy = new Date()
-  hoy.setHours(0, 0, 0, 0)
-  const diffDays = Math.ceil((resDate.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24))
-  if (diffDays <= 2) {
-    setAlert({ type: 'err', msg: '⚠️ No puedes cancelar una reserva con 2 días o menos de anticipación. Contacta al administrador.' })
-    return
+    const resDate = new Date(date + 'T00:00:00')
+    const hoy = new Date()
+    hoy.setHours(0, 0, 0, 0)
+    const diffDays = Math.ceil((resDate.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24))
+    if (diffDays <= 2) {
+      setAlert({ type: 'err', msg: '⚠️ No puedes cancelar una reserva con 2 días o menos de anticipación. Contacta al administrador.' })
+      return
+    }
+    if (!confirm('¿Cancelar esta reserva?')) return
+    await fetch(`/api/reservations/${id}`, { method: 'DELETE' })
+    setReservations(prev => prev.filter(r => r.id !== id))
+    setAllReservations(prev => prev.filter(r => r.id !== id))
   }
-  if (!confirm('¿Cancelar esta reserva?')) return
-  await fetch(`/api/reservations/${id}`, { method: 'DELETE' })
-  setReservations(prev => prev.filter(r => r.id !== id))
-  setAllReservations(prev => prev.filter(r => r.id !== id))
-}
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-slate-400 text-sm">Cargando…</div>
 
@@ -99,14 +115,22 @@ export default function PortalPage() {
     </div>
   )
 
-  const usedQuota = reservations.filter(r => countsAgainstQuota(r.date, r.slot)).length
-  const nights = reservations.filter(r => r.slot === 'night' && !isSunday(r.date)).length
-  const sundays = reservations.filter(r => isSunday(r.date)).length
+  // Filtrar reservas por mes del contrato seleccionado
+  const monthReservations = contract ? reservations.filter(r => {
+    const rd = new Date(r.date + 'T12:00:00')
+    const mStart = new Date(contract[`month${selectedContractMonth}_start`] + 'T00:00:00')
+    const mEnd = new Date(contract[`month${selectedContractMonth}_end`] + 'T23:59:59')
+    return rd >= mStart && rd <= mEnd
+  }) : reservations
+
+  const usedQuota = monthReservations.filter(r => countsAgainstQuota(r.date, r.slot)).length
+  const nights = monthReservations.filter(r => r.slot === 'night' && !isSunday(r.date)).length
+  const sundays = monthReservations.filter(r => isSunday(r.date)).length
   const total = PACKAGES[client.package].blocks
   const remaining = Math.max(0, total - usedQuota)
-const extraBlocks = reservations.filter(r => countsAgainstQuota(r.date, r.slot)).length - total
-const extraBlocksCount = extraBlocks > 0 ? extraBlocks : 0
-  const pct = Math.round((usedQuota / total) * 100)
+  const extraBlocks = monthReservations.filter(r => countsAgainstQuota(r.date, r.slot)).length - total
+  const extraBlocksCount = extraBlocks > 0 ? extraBlocks : 0
+  const pct = Math.round((Math.min(usedQuota, total) / total) * 100)
   const dl = daysLeft(client.start_date)
   const end = getVigencyEnd(client.start_date)
   const pkg = PACKAGES[client.package]
@@ -115,16 +139,18 @@ const extraBlocksCount = extraBlocks > 0 ? extraBlocks : 0
   const nightNeto = nights * client.night_price
   const sundayNeto = sundays * (client.sunday_price || 25)
   const extraBlockNeto = extraBlocksCount * extraBlockPrice
-const totalNeto = baseNeto + nightNeto + sundayNeto + extraBlockNeto
+  const totalNeto = baseNeto + nightNeto + sundayNeto + extraBlockNeto
   const baseIva = baseNeto * IVA
   const nightIva = nightNeto * IVA
   const sundayIva = sundayNeto * IVA
   const totalIva = totalNeto * IVA
   const totalConIva = totalNeto * (1 + IVA)
   const depStatus = client.deposit_status ? DEPOSIT_STATUS[client.deposit_status] : null
-  const pkgStatus = billingMonth?.package_status || 'pendiente'
 
-  const extraReservations = reservations
+  // Estado de pago del mes seleccionado
+  const selectedMonthStart = contract ? contract[`month${selectedContractMonth}_start`] : null
+
+  const extraReservations = monthReservations
     .filter(r => r.slot === 'night' || isSunday(r.date))
     .map(r => ({ ...r, chargeStatus: (r as any).charge_status || 'programado' }))
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -132,8 +158,15 @@ const totalNeto = baseNeto + nightNeto + sundayNeto + extraBlockNeto
   const isSelectedSunday = isSunday(date)
   const isSelectedNight = slot === 'night'
   const isExtraBlock = !isSelectedSunday && !isSelectedNight && remaining <= 0 && (slot === 'morning' || slot === 'afternoon') && !isSunday(date)
+  const canBook = isSelectedSunday || isSelectedNight || remaining > 0 || isExtraBlock
 
-const canBook = isSelectedSunday || isSelectedNight || remaining > 0 || isExtraBlock
+  // Mes actual del contrato
+  const today2 = new Date()
+  const currentContractMonth = contract ? (
+    today2 >= new Date(contract.month1_start) && today2 <= new Date(contract.month1_end + 'T23:59:59') ? 1 :
+    today2 >= new Date(contract.month2_start) && today2 <= new Date(contract.month2_end + 'T23:59:59') ? 2 :
+    today2 >= new Date(contract.month3_start) && today2 <= new Date(contract.month3_end + 'T23:59:59') ? 3 : null
+  ) : null
 
   function chargeStatusLabel(status: string) {
     if (status === 'cobrado') return { label: '✓ Cobrado', color: 'bg-green-50 text-green-600' }
@@ -168,13 +201,9 @@ const canBook = isSelectedSunday || isSelectedNight || remaining > 0 || isExtraB
     <div className="min-h-screen bg-slate-50">
       <nav className="bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3">
         <div className="flex items-center gap-3">
-  <img
-    src="/Logo%20M%20Negro.png"
-    alt="Modulare"
-    className="w-10 h-10 object-contain"
-  />
-  <span className="text-xl font-semibold text-slate-800" style={{ fontFamily: 'Fraunces, serif' }}>Modulare Flex Office</span>
-</div>
+          <img src="/Logo%20M%20Negro.png" alt="Modulare" className="w-10 h-10 object-contain" />
+          <span className="text-xl font-semibold text-slate-800" style={{ fontFamily: 'Fraunces, serif' }}>Modulare Flex Office</span>
+        </div>
         <span className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded-full ml-auto">Portal de clientes</span>
         <button onClick={logout} className="text-xs text-slate-400 hover:text-slate-600">Salir</button>
       </nav>
@@ -183,21 +212,46 @@ const canBook = isSelectedSunday || isSelectedNight || remaining > 0 || isExtraB
 
         {/* Summary */}
         <div className="bg-white rounded-2xl border border-slate-200 p-4">
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-3 mb-3">
             <div className="w-11 h-11 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-semibold">
               {displayName(client).split(' ').map((x: string) => x[0]).slice(0, 2).join('')}
             </div>
-            <div>
+            <div className="flex-1">
               <div className="font-semibold">{displayName(client)}</div>
               {client.company_name && <div className="text-xs text-slate-400">{client.name}</div>}
               <div className="text-xs text-slate-400">Paquete {pkg.label} · {fmt$(pkg.price)}+IVA/mes</div>
+              {contract && <div className="text-xs text-slate-500 font-medium mt-0.5">{contract.contract_number}</div>}
             </div>
-            <span className={`ml-auto text-xs px-2 py-1 rounded-full font-medium ${dl <= 5 ? 'bg-amber-50 text-amber-600' : 'bg-blue-50 text-blue-600'}`}>
+            <span className={`text-xs px-2 py-1 rounded-full font-medium ${dl <= 5 ? 'bg-amber-50 text-amber-600' : 'bg-blue-50 text-blue-600'}`}>
               {dl}d restantes
             </span>
           </div>
+
+          {/* Selector de mes del contrato */}
+          {contract && (
+            <div className="mb-3">
+              <div className="flex gap-1 mb-1">
+                {[1,2,3].map(m => {
+                  const mStart = new Date(contract[`month${m}_start`] + 'T00:00:00')
+                  const mEnd = new Date(contract[`month${m}_end`] + 'T23:59:59')
+                  const isCurrentM = new Date() >= mStart && new Date() <= mEnd
+                  const isSelected = selectedContractMonth === m
+                  return (
+                    <button key={m} onClick={() => setSelectedContractMonth(m)}
+                      className={`text-xs px-2 py-0.5 rounded-full border transition-all ${isSelected ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-200 text-slate-500 hover:border-blue-300'}`}>
+                      Mes {m}/3 {isCurrentM ? '●' : ''}
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="text-xs text-slate-400">
+                {new Date(contract[`month${selectedContractMonth}_start`] + 'T12:00:00').toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })} → {new Date(contract[`month${selectedContractMonth}_end`] + 'T12:00:00').toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-5 gap-2">
-            <div className="bg-slate-50 rounded-xl p-3"><div className="text-xs text-slate-400 mb-1">Usados</div><div className="text-xl font-semibold">{usedQuota}/{total}</div></div>
+            <div className="bg-slate-50 rounded-xl p-3"><div className="text-xs text-slate-400 mb-1">Usados</div><div className="text-xl font-semibold">{Math.min(usedQuota, total)}/{total}</div></div>
             <div className="bg-slate-50 rounded-xl p-3"><div className="text-xs text-slate-400 mb-1">Disponibles</div><div className={`text-xl font-semibold ${remaining === 0 ? 'text-red-500' : remaining <= 1 ? 'text-amber-500' : 'text-green-600'}`}>{remaining}</div></div>
             <div className="bg-slate-50 rounded-xl p-3"><div className="text-xs text-slate-400 mb-1">Noches</div><div className="text-xl font-semibold">{nights}</div>{nights > 0 && <div className="text-xs text-amber-600">{fmt$(nightNeto)}</div>}</div>
             <div className="bg-slate-50 rounded-xl p-3"><div className="text-xs text-slate-400 mb-1">Domingos</div><div className="text-xl font-semibold">{sundays}</div>{sundays > 0 && <div className="text-xs text-purple-600">{fmt$(sundayNeto)}</div>}</div>
@@ -256,7 +310,7 @@ const canBook = isSelectedSunday || isSelectedNight || remaining > 0 || isExtraB
                   const isPast = new Date(r.date + 'T23:59:00') < new Date()
                   const isDom = isSunday(r.date)
                   const isExtraBlockRes = !isDom && r.slot !== 'night' && countsAgainstQuota(r.date, r.slot) && reservations.filter(rx => countsAgainstQuota(rx.date, rx.slot)).indexOf(r) >= total
-const extraCost = isDom ? (client.sunday_price || 25) : r.slot === 'night' ? client.night_price : isExtraBlockRes ? extraBlockPrice : 0
+                  const extraCost = isDom ? (client.sunday_price || 25) : r.slot === 'night' ? client.night_price : isExtraBlockRes ? extraBlockPrice : 0
                   return (
                     <div key={r.id} className={`flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 ${isPast ? 'opacity-50' : ''}`}>
                       <span className={`w-2 h-2 rounded-full flex-shrink-0 ${r.slot === 'morning' ? 'bg-blue-400' : r.slot === 'afternoon' ? 'bg-green-400' : 'bg-amber-400'}`} />
@@ -307,15 +361,11 @@ const extraCost = isDom ? (client.sunday_price || 25) : r.slot === 'night' ? cli
                       {mine.map(r => (
                         <div key={r.id} className={`w-full h-2 rounded-full ${slotDot[r.slot]}`} title={SLOTS[r.slot as keyof typeof SLOTS].label} />
                       ))}
-                     {others.map((r, i) => (
-  <div key={i} className="w-full h-2 rounded-full bg-slate-300 flex items-center">
-    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-      r.slot === 'morning' ? 'bg-blue-400' :
-      r.slot === 'afternoon' ? 'bg-green-400' :
-      'bg-amber-400'
-    }`} />
-  </div>
-))}
+                      {others.map((r, i) => (
+                        <div key={i} className="w-full h-2 rounded-full bg-slate-300 flex items-center">
+                          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${r.slot === 'morning' ? 'bg-blue-400' : r.slot === 'afternoon' ? 'bg-green-400' : 'bg-amber-400'}`} />
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )
@@ -335,7 +385,26 @@ const extraCost = isDom ? (client.sunday_price || 25) : r.slot === 'night' ? cli
           <div className="bg-white rounded-2xl border border-slate-200 p-4">
             <div className="mb-4">
               <h3 className="font-semibold text-slate-700">Resumen de facturación</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Mes en curso · IVA 13%</p>
+              {contract && (
+                <div className="mt-2">
+                  <div className="flex gap-1 mb-1">
+                    {[1,2,3].map(m => {
+                      const isCurrentM = currentContractMonth === m
+                      const isSelected = selectedContractMonth === m
+                      return (
+                        <button key={m} onClick={() => setSelectedContractMonth(m)}
+                          className={`text-xs px-2 py-0.5 rounded-full border transition-all ${isSelected ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-200 text-slate-500 hover:border-blue-300'}`}>
+                          Mes {m}/3 {isCurrentM ? '●' : ''}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    {new Date(contract[`month${selectedContractMonth}_start`] + 'T12:00:00').toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })} → {new Date(contract[`month${selectedContractMonth}_end`] + 'T12:00:00').toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                  </p>
+                </div>
+              )}
+              {!contract && <p className="text-xs text-slate-400 mt-0.5">Mes en curso · IVA 13%</p>}
             </div>
             <div className="grid grid-cols-3 gap-3 mb-5">
               <div className="bg-slate-50 rounded-xl p-3"><div className="text-xs text-slate-400 mb-1">Neto</div><div className="text-lg font-semibold text-slate-700">{fmt$(totalNeto)}</div></div>
@@ -351,9 +420,6 @@ const extraCost = isDom ? (client.sunday_price || 25) : r.slot === 'night' ? cli
                   <div>
                     <span className="text-slate-600">Paquete {pkg.label}</span>
                     <span className="text-xs text-slate-400 block">{pkg.blocks} bloques</span>
-                    <span className={`mt-1 inline-block text-xs px-2 py-0.5 rounded-full font-medium ${pkgStatus === 'pagado' ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'}`}>
-                      {pkgStatus === 'pagado' ? '✓ Pagado' : '⏳ Pendiente de pago'}
-                    </span>
                   </div>
                   <span className="text-right text-slate-600">{fmt$(baseNeto)}</span>
                   <span className="text-right text-slate-400">{fmt$(baseIva)}</span>
@@ -404,28 +470,28 @@ const extraCost = isDom ? (client.sunday_price || 25) : r.slot === 'night' ? cli
                   </div>
                 </div>
               )}
-             {extraBlocksCount > 0 && (
-  <div className="border-b border-slate-50">
-    <div className="grid grid-cols-4 px-3 py-2 text-sm items-start">
-      <div><span className="text-slate-600">Bloques extra</span><span className="text-xs text-slate-400 block">{extraBlocksCount} × {fmt$(extraBlockPrice)}</span></div>
-      <span className="text-right text-slate-600">{fmt$(extraBlockNeto)}</span>
-      <span className="text-right text-slate-400">{fmt$(extraBlockNeto * 0.13)}</span>
-      <span className="text-right font-medium">{fmt$(extraBlockNeto * 1.13)}</span>
-    </div>
-    <div className="px-3 pb-2 space-y-1">
-      {reservations.filter(r => countsAgainstQuota(r.date, r.slot)).slice(total).map(r => {
-        const cs = chargeStatusLabel((r as any).charge_status || 'programado')
-        return (
-          <div key={r.id} className="flex items-center gap-2 text-xs">
-            <span className="text-slate-400">{new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit' })}</span>
-            <span className="flex-1" />
-            <span className={`px-2 py-0.5 rounded-full font-medium ${cs.color}`}>{cs.label}</span>
-          </div>
-        )
-      })}
-    </div>
-  </div>
-)}
+              {extraBlocksCount > 0 && (
+                <div className="border-b border-slate-50">
+                  <div className="grid grid-cols-4 px-3 py-2 text-sm items-start">
+                    <div><span className="text-slate-600">Bloques extra</span><span className="text-xs text-slate-400 block">{extraBlocksCount} × {fmt$(extraBlockPrice)}</span></div>
+                    <span className="text-right text-slate-600">{fmt$(extraBlockNeto)}</span>
+                    <span className="text-right text-slate-400">{fmt$(extraBlockNeto * 0.13)}</span>
+                    <span className="text-right font-medium">{fmt$(extraBlockNeto * 1.13)}</span>
+                  </div>
+                  <div className="px-3 pb-2 space-y-1">
+                    {monthReservations.filter(r => countsAgainstQuota(r.date, r.slot)).slice(total).map(r => {
+                      const cs = chargeStatusLabel((r as any).charge_status || 'programado')
+                      return (
+                        <div key={r.id} className="flex items-center gap-2 text-xs">
+                          <span className="text-slate-400">{new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit' })}</span>
+                          <span className="flex-1" />
+                          <span className={`px-2 py-0.5 rounded-full font-medium ${cs.color}`}>{cs.label}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-4 px-3 py-2.5 text-sm bg-slate-50 font-semibold">
                 <span className="text-slate-700">Total mes</span>
                 <span className="text-right text-slate-700">{fmt$(totalNeto)}</span>
