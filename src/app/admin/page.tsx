@@ -37,6 +37,8 @@ export default function AdminPage() {
   const [showNewRes, setShowNewRes] = useState<{ date?: string; slot?: string } | null>(null)
 const [editingRes, setEditingRes] = useState<Reservation | null>(null)
   const [filterClient, setFilterClient] = useState('')
+const [filterYear, setFilterYear] = useState('')
+const [filterMonth, setFilterMonth] = useState('')
   const [billingClient, setBillingClient] = useState('')
   const [billingVigency, setBillingVigency] = useState('')
 const [selectedContractMonth, setSelectedContractMonth] = useState<Record<string, number>>({})
@@ -634,7 +636,7 @@ const contractMonth = contract ? (
           </div>
         )}
 
-        {/* ── RESERVATIONS ── */}
+       {/* ── RESERVATIONS ── */}
         {tab === 'reservations' && (
           <div className="bg-white rounded-2xl border border-slate-200 p-4">
             <div className="flex items-center gap-3 mb-4 flex-wrap">
