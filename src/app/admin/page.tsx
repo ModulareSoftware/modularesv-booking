@@ -609,45 +609,26 @@ const contractMonth = contract ? (
                 const pkg = PACKAGES[c.package]
                 const depStatus = DEPOSIT_STATUS[c.deposit_status]
                 return (
-                  <div key={c.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:border-slate-200">
-                    <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-semibold flex-shrink-0">
-                      {displayName(c).split(' ').map((x: string) => x[0]).slice(0, 2).join('')}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-sm">{displayName(c)}</span>
-                        {c.company_name && <span className="text-xs text-slate-400">({c.name})</span>}
-                        <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">{pkg.label}</span>
-{contract && <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">{contract.contract_number}</span>}
-{contractMonth && <span className="text-xs bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full">Mes {contractMonth}/3</span>}
-{dl <= 5 && <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">⚠️ {dl}d</span>}
-                      </div>
-                      <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-2 flex-wrap">
-                        <span>{used}/{total} bloques · vence {end.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
-                        {nights > 0 && <span>· {nights} noches</span>}
-                        {sundays > 0 && <span>· {sundays} domingos</span>}
-                        {extraBlocksCount > 0 && <span>· {extraBlocksCount} bloques extra</span>}
-                        {c.deposit_amount > 0 && (
-                          <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${depStatus.color}`}>
-                            Depósito {fmt$(c.deposit_amount)} · {depStatus.label}
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-1.5 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full ${pct >= 100 ? 'bg-red-400' : pct >= 75 ? 'bg-amber-400' : 'bg-blue-400'}`} style={{ width: `${pct}%` }} />
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                      <span className={`text-xs font-semibold px-2 py-1 rounded-lg ${remaining === 0 ? 'bg-red-50 text-red-600' : remaining <= 1 ? 'bg-amber-50 text-amber-600' : 'bg-green-50 text-green-600'}`}>
-                        {remaining} disp.
-                      </span>
-                      <div className="flex gap-2">
-                        <button onClick={() => setEditingClient(c)} className="text-xs text-blue-400 hover:text-blue-600">editar</button>
-                        <button onClick={() => deleteClient(c.id)} className="text-xs text-slate-300 hover:text-red-400">eliminar</button>
-                      </div>
-                    </div>
-                  </div>
-                )
+                <ClientRow
+                  key={c.id}
+                  c={c}
+                  contract={contract}
+                  contractMonth={contractMonth}
+                  used={used}
+                  total={total}
+                  remaining={remaining}
+                  nights={nights}
+                  sundays={sundays}
+                  dl={dl}
+                  end={end}
+                  pkg={pkg}
+                  depStatus={depStatus}
+                  reservations={reservations}
+                  contracts={contracts}
+                  onEdit={() => setEditingClient(c)}
+                  onDelete={() => deleteClient(c.id)}
+                />
+              )
               })}
             </div>
           </div>
@@ -1024,7 +1005,93 @@ const pendingExtras = extraRes.filter(r => r.chargeStatus === 'por_cobrar').leng
     </div>
   )
 }
+function ClientRow({ c, contract, contractMonth, used, total, remaining, nights, sundays, dl, end, pkg, depStatus, reservations, contracts, onEdit, onDelete }: any) {
+  const [expanded, setExpanded] = useState(false)
+  const pct = Math.round((used / total) * 100)
 
+  return (
+    <div className="rounded-xl border border-slate-100 hover:border-slate-200">
+      <div className="flex items-center gap-3 p-3">
+        <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-semibold flex-shrink-0">
+          {displayName(c).split(' ').map((x: string) => x[0]).slice(0, 2).join('')}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium text-sm">{displayName(c)}</span>
+            {c.company_name && <span className="text-xs text-slate-400">({c.name})</span>}
+            <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">{pkg.label}</span>
+            {contract && <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">{contract.contract_number}</span>}
+            {contractMonth && <span className="text-xs bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full">Mes {contractMonth}/3</span>}
+            {dl <= 5 && <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">⚠️ {dl}d</span>}
+          </div>
+          <div className="text-xs text-slate-400 mt-0.5">
+            Vence {end.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+            {c.deposit_amount > 0 && <span className={`ml-2 px-1.5 py-0.5 rounded text-xs font-medium ${depStatus.color}`}>Depósito {fmt$(c.deposit_amount)} · {depStatus.label}</span>}
+          </div>
+          <div className="mt-1.5 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <div className={`h-full rounded-full ${pct >= 100 ? 'bg-red-400' : pct >= 75 ? 'bg-amber-400' : 'bg-blue-400'}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+          <span className={`text-xs font-semibold px-2 py-1 rounded-lg ${remaining === 0 ? 'bg-red-50 text-red-600' : remaining <= 1 ? 'bg-amber-50 text-amber-600' : 'bg-green-50 text-green-600'}`}>
+            {remaining} disp.
+          </span>
+          <div className="flex gap-2 items-center">
+            {contract && (
+              <button onClick={() => setExpanded(e => !e)} className="text-xs text-purple-400 hover:text-purple-600">
+                {expanded ? 'ocultar' : 'ver meses'}
+              </button>
+            )}
+            <button onClick={onEdit} className="text-xs text-blue-400 hover:text-blue-600">editar</button>
+            <button onClick={onDelete} className="text-xs text-slate-300 hover:text-red-400">eliminar</button>
+          </div>
+        </div>
+      </div>
+
+      {expanded && contract && (
+        <div className="border-t border-slate-100 px-3 pb-3 pt-2 space-y-2">
+          {[1, 2, 3].map(m => {
+            const mStart = new Date(contract[`month${m}_start`] + 'T00:00:00')
+            const mEnd = new Date(contract[`month${m}_end`] + 'T23:59:59')
+            const isCurrentM = new Date() >= mStart && new Date() <= mEnd
+            const monthRes = reservations.filter((r: any) => {
+              if (r.client_id !== c.id) return false
+              const rd = new Date(r.date + 'T12:00:00')
+              return rd >= mStart && rd <= mEnd
+            })
+            const monthUsed = monthRes.filter((r: any) => countsAgainstQuota(r.date, r.slot)).length
+            const monthNights = monthRes.filter((r: any) => r.slot === 'night' && !isSunday(r.date)).length
+            const monthSundays = monthRes.filter((r: any) => isSunday(r.date)).length
+            const monthExtras = Math.max(0, monthUsed - total)
+            const monthRemaining = Math.max(0, total - monthUsed)
+            const monthPct = Math.round((Math.min(monthUsed, total) / total) * 100)
+            return (
+              <div key={m} className={`rounded-xl p-3 ${isCurrentM ? 'bg-blue-50 border border-blue-100' : 'bg-slate-50 border border-slate-100'}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${isCurrentM ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'}`}>Mes {m}/3</span>
+                  {isCurrentM && <span className="text-xs text-blue-500">● Mes actual</span>}
+                  <span className="text-xs text-slate-400 ml-auto">
+                    {new Date(contract[`month${m}_start`] + 'T12:00:00').toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })} → {new Date(contract[`month${m}_end`] + 'T12:00:00').toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                  </span>
+                </div>
+                <div className="flex gap-4 text-xs text-slate-500 flex-wrap">
+                  <span>{Math.min(monthUsed, total)}/{total} bloques</span>
+                  {monthNights > 0 && <span>· {monthNights} noches</span>}
+                  {monthSundays > 0 && <span>· {monthSundays} domingos</span>}
+                  {monthExtras > 0 && <span className="text-orange-500">· {monthExtras} extra{monthExtras > 1 ? 's' : ''}</span>}
+                  <span className={`ml-auto font-semibold ${monthRemaining === 0 ? 'text-red-500' : monthRemaining <= 1 ? 'text-amber-500' : 'text-green-600'}`}>{monthRemaining} disp.</span>
+                </div>
+                <div className="mt-1.5 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full ${monthPct >= 100 ? 'bg-red-400' : monthPct >= 75 ? 'bg-amber-400' : 'bg-blue-400'}`} style={{ width: `${monthPct}%` }} />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
 function NewClientModal({ onClose, onSave }: { onClose: () => void; onSave: (d: object) => void }) {
   const today = fmtDate(new Date())
   const [form, setForm] = useState({
