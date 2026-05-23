@@ -151,8 +151,6 @@ setBillingMonth(bills)
   const selectedMonthStart = contract ? contract[`month${selectedContractMonth}_start`] : null
 const selectedBillingMonth = billingMonths.find((b: any) => b.month_start === selectedMonthStart)
 const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
-  const selectedBillingMonth = billingMonth?.month_start === selectedMonthStart ? billingMonth : null
-const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
 
   const extraReservations = monthReservations
     .filter(r => r.slot === 'night' || isSunday(r.date))
