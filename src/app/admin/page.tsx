@@ -711,7 +711,12 @@ const contractMonth = contract ? (
               </button>
             </div>
             {(() => {
-              const filtered = reservations.filter(r => !filterClient || r.client_id === filterClient).sort((a, b) => a.date.localeCompare(b.date))
+              const filtered = reservations.filter(r => {
+  if (filterClient && r.client_id !== filterClient) return false
+  if (filterYear && !r.date.startsWith(filterYear)) return false
+  if (filterMonth && r.date.slice(5, 7) !== filterMonth) return false
+  return true
+}).sort((a, b) => a.date.localeCompare(b.date))
               if (!filtered.length) return <p className="text-slate-400 text-sm text-center py-8">Sin reservas</p>
               return (
                 <div className="space-y-2">
