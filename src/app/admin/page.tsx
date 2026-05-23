@@ -650,7 +650,8 @@ const contractMonth = contract ? (
       for (const m of [1, 2, 3]) {
         const ms = new Date(contract[`month${m}_start`] + 'T00:00:00')
         const me = new Date(contract[`month${m}_end`] + 'T23:59:59')
-        if (rd >= ms && rd <= me) { mes = `0${m}/3`; break }
+        if (rd >= ms && rd <= me) { mes = `Mes 0${m} de 03`; break }
+      
       }
     }
     const isDom = isSunday(r.date)
