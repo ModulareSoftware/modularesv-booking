@@ -657,7 +657,7 @@ const contractMonth = contract ? (
     const tipo = isDom ? 'Domingo' : r.slot === 'night' ? 'Noche extra' : countsAgainstQuota(r.date, r.slot) ? 'Normal' : 'Normal'
     const diasSemana = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']
     return [
-      c ? displayName(c) : '',
+      c?.name || '',
       c?.company_name || '',
       contract?.contract_number || '',
       mes,
@@ -668,7 +668,7 @@ const contractMonth = contract ? (
       (r as any).charge_status || 'programado',
     ]
   })
-  const headers = ['Cliente','Empresa','Contrato','Mes','Fecha','Día','Turno','Tipo','Estado cobro']
+  const headers = ['Nombre','Empresa','Contrato','Mes de Contrato','Fecha de Reserva','Día','Turno','Tipo','Estado cobro']
   const csv = [headers, ...rows].map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
