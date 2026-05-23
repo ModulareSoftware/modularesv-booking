@@ -264,7 +264,14 @@ const pkgStatus = billingMonth?.package_status || 'pendiente'
   const mEnd = new Date(contract[`month${selectedMonth}_end`] + 'T23:59:59')
   return rd >= mStart && rd <= mEnd
 })
-    
+  const extraBlockRes = billingReservations(c.id).filter(r => {
+  if (!countsAgainstQuota(r.date, r.slot)) return false
+  if (!contract) return true
+  const rd = new Date(r.date + 'T12:00:00')
+  const mStart = new Date(contract[`month${selectedMonth}_start`] + 'T00:00:00')
+  const mEnd = new Date(contract[`month${selectedMonth}_end`] + 'T23:59:59')
+  return rd >= mStart && rd <= mEnd
+}).slice(PACKAGES[c.package].blocks)  
   const today = new Date().toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
   const html = `<!DOCTYPE html>
@@ -358,11 +365,11 @@ const pkgStatus = billingMonth?.package_status || 'pendiente'
         <td class="right">$${b.sundayIva.toFixed(2)}</td>
         <td class="right">$${(b.sundayNeto + b.sundayIva).toFixed(2)}</td>
       </tr>` : ''}
-      ${b.extraBlocks > 0 ? `<tr>
+     ${b.extraBlocks > 0 ? `<tr>
   <td>
     Bloques extra (${b.extraBlocks} × $${b.extraBlockPrice.toFixed(2)})
     <div style="margin-top:6px;">
-      ${extraRes.filter(r => !isSunday(r.date) && r.slot !== 'night').map(r =>
+      ${extraBlockRes.map(r =>
         '<div style="font-size:11px; color:#64748b; display:flex; justify-content:space-between; padding:2px 0;">' +
         '<span>' + new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit' }) + '</span>' +
         '<span style="color:' + ((r as any).charge_status === 'cobrado' ? '#16a34a' : (r as any).charge_status === 'por_cobrar' ? '#d97706' : '#94a3b8') + '">' +
@@ -371,10 +378,10 @@ const pkgStatus = billingMonth?.package_status || 'pendiente'
       ).join('')}
     </div>
   </td>
-        <td class="right">$${b.extraBlockNeto.toFixed(2)}</td>
-        <td class="right">$${b.extraBlockIva.toFixed(2)}</td>
-        <td class="right">$${(b.extraBlockNeto + b.extraBlockIva).toFixed(2)}</td>
-      </tr>` : ''}
+  <td class="right">$${b.extraBlockNeto.toFixed(2)}</td>
+  <td class="right">$${b.extraBlockIva.toFixed(2)}</td>
+  <td class="right">$${(b.extraBlockNeto + b.extraBlockIva).toFixed(2)}</td>
+</tr>` : ''}
       <tr class="total-row">
         <td>Total</td>
         <td class="right">$${b.totalNeto.toFixed(2)}</td>
