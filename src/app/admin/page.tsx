@@ -639,6 +639,47 @@ const contractMonth = contract ? (
           <div className="bg-white rounded-2xl border border-slate-200 p-4">
             <div className="flex items-center gap-3 mb-4 flex-wrap">
               <h2 className="font-semibold text-slate-700 mr-auto">Todas las reservas</h2>
+<button onClick={() => {
+  const filtered = reservations.filter(r => !filterClient || r.client_id === filterClient).sort((a, b) => a.date.localeCompare(b.date))
+  const rows = filtered.map(r => {
+    const c = clients.find(x => x.id === r.client_id)
+    const contract = contracts.find((ct: any) => ct.client_id === r.client_id && ct.status === 'active')
+    const rd = new Date(r.date + 'T12:00:00')
+    let mes = ''
+    if (contract) {
+      for (const m of [1, 2, 3]) {
+        const ms = new Date(contract[`month${m}_start`] + 'T00:00:00')
+        const me = new Date(contract[`month${m}_end`] + 'T23:59:59')
+        if (rd >= ms && rd <= me) { mes = `0${m}/3`; break }
+      }
+    }
+    const isDom = isSunday(r.date)
+    const tipo = isDom ? 'Domingo' : r.slot === 'night' ? 'Noche extra' : countsAgainstQuota(r.date, r.slot) ? 'Normal' : 'Normal'
+    const diasSemana = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']
+    return [
+      c ? displayName(c) : '',
+      c?.company_name || '',
+      contract?.contract_number || '',
+      mes,
+      r.date,
+      diasSemana[rd.getDay()],
+      r.slot === 'morning' ? 'Mañana' : r.slot === 'afternoon' ? 'Tarde' : 'Noche extra',
+      tipo,
+      (r as any).charge_status || 'programado',
+    ]
+  })
+  const headers = ['Cliente','Empresa','Contrato','Mes','Fecha','Día','Turno','Tipo','Estado cobro']
+  const csv = [headers, ...rows].map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `reservas_${new Date().toISOString().slice(0,10)}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}} className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 flex items-center gap-1">
+  📊 Exportar CSV
+</button>
               <select value={filterClient} onChange={e => setFilterClient(e.target.value)}
                 className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
                 <option value="">Todos los clientes</option>
