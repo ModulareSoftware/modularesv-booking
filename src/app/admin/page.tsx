@@ -660,6 +660,20 @@ const contractMonth = contract ? (
                         <div className="flex-1 text-sm">
                           <span className="font-medium">{c ? displayName(c) : '?'}</span>
                           <span className="text-slate-400"> · {new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })} · {slot.label}</span>
+                          {(() => {
+  const contract = contracts.find((ct: any) => ct.client_id === r.client_id && ct.status === 'active')
+  if (!contract) return null
+  const rd = new Date(r.date + 'T12:00:00')
+  for (const m of [1, 2, 3]) {
+    const ms = new Date(contract[`month${m}_start`] + 'T00:00:00')
+    const me = new Date(contract[`month${m}_end`] + 'T23:59:59')
+    if (rd >= ms && rd <= me) {
+      const colors = ['bg-blue-50 text-blue-600', 'bg-green-50 text-green-600', 'bg-purple-50 text-purple-600']
+      return <span className={`ml-1 text-xs px-1.5 py-0.5 rounded font-medium ${colors[m-1]}`}>0{m}/3</span>
+    }
+  }
+  return null
+})()}
                           {isDom && <span className="ml-1 text-xs text-purple-600">🗓️ dom</span>}
                           {r.slot === 'night' && !isDom && <span className="ml-2 text-xs bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">noche</span>}
                         </div>
