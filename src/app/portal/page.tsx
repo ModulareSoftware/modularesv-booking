@@ -12,7 +12,7 @@ export default function PortalPage() {
   const [client, setClient] = useState<Client | null>(null)
   const [reservations, setReservations] = useState<Reservation[]>([])
   const [allReservations, setAllReservations] = useState<Reservation[]>([])
-  const [billingMonth, setBillingMonth] = useState<any>(null)
+  const [billingMonths, setBillingMonths] = useState<any[]>([])
   const [contract, setContract] = useState<any>(null)
   const [selectedContractMonth, setSelectedContractMonth] = useState<number>(1)
   const [date, setDate] = useState(fmtDate(new Date()))
@@ -51,7 +51,7 @@ export default function PortalPage() {
     setReservations(await resRes.json())
     setAllReservations(await allResRes.json())
     const bills = await billRes.json()
-    if (bills.length > 0) setBillingMonth(bills[0])
+setBillingMonth(bills)
     const cons = await conRes.json()
     if (cons.length > 0) {
       const activeContract = cons.find((c: any) => c.status === 'active')
@@ -149,6 +149,10 @@ export default function PortalPage() {
 
   // Estado de pago del mes seleccionado
   const selectedMonthStart = contract ? contract[`month${selectedContractMonth}_start`] : null
+const selectedBillingMonth = billingMonths.find((b: any) => b.month_start === selectedMonthStart)
+const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
+  const selectedBillingMonth = billingMonth?.month_start === selectedMonthStart ? billingMonth : null
+const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
 
   const extraReservations = monthReservations
     .filter(r => r.slot === 'night' || isSunday(r.date))
@@ -437,7 +441,10 @@ export default function PortalPage() {
                 <div className="grid grid-cols-4 items-start">
                   <div>
                     <span className="text-slate-600">Paquete {pkg.label}</span>
-                    <span className="text-xs text-slate-400 block">{pkg.blocks} bloques</span>
+<span className="text-xs text-slate-400 block">{pkg.blocks} bloques</span>
+<span className={`mt-1 inline-block text-xs px-2 py-0.5 rounded-full font-medium ${pkgStatus === 'pagado' ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'}`}>
+  {pkgStatus === 'pagado' ? '✓ Pagado' : '⏳ Pendiente de pago'}
+</span>
                   </div>
                   <span className="text-right text-slate-600">{fmt$(baseNeto)}</span>
                   <span className="text-right text-slate-400">{fmt$(baseIva)}</span>
