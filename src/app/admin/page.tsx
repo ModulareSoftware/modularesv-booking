@@ -794,6 +794,7 @@ const contractMonth = contract ? (
                   const selectedMonthEnd = contract ? contract[`month${selectedMonth}_end`] : null
                   const billingMonth = billingMonths.find(bm => bm.client_id === c.id && bm.month_start === selectedMonthStart) || getCurrentBillingMonth(c)
                   const pkgStatus = billingMonth?.package_status || 'pendiente'
+                  const mesContrato = `Mes 0${selectedMonth} de 03`
                   const periodo = selectedMonthStart && selectedMonthEnd
                     ? `${selectedMonthStart} → ${selectedMonthEnd}`
                     : ''
@@ -801,6 +802,7 @@ const contractMonth = contract ? (
                     c.name || '',
                     c.company_name || '',
                     contract?.contract_number || '',
+                    mesContrato,
                     periodo,
                     pkg.label,
                     pkgStatus,
@@ -817,7 +819,7 @@ const contractMonth = contract ? (
                     b.totalConIva.toFixed(2),
                   ]
                 })
-                const headers = ['Nombre','Empresa','Contrato','Periodo','Paquete','Estado Paquete','Neto Base','IVA Base','Noches Extra','Neto Noches','Domingos','Neto Domingos','Bloques Extra','Neto Extras','Total Neto','IVA Total','Total con IVA']
+                const headers = ['Nombre','Empresa','Contrato','Mes de Contrato','Periodo','Paquete','Estado Paquete','Neto Base','IVA Base','Noches Extra','Neto Noches','Domingos','Neto Domingos','Bloques Extra','Neto Extras','Total Neto','IVA Total','Total con IVA']
                 const csv = [headers, ...rows].map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
                 const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
                 const url = URL.createObjectURL(blob)
