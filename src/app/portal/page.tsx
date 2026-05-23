@@ -315,7 +315,7 @@ export default function PortalPage() {
                   const slotInfo = SLOTS[r.slot as keyof typeof SLOTS]
                   const isPast = new Date(r.date + 'T23:59:00') < new Date()
                   const isDom = isSunday(r.date)
-                  const isExtraBlockRes = !isDom && r.slot !== 'night' && countsAgainstQuota(r.date, r.slot) && reservations.filter(rx => countsAgainstQuota(rx.date, rx.slot)).indexOf(r) >= total
+                  const isExtraBlockRes = !isDom && r.slot !== 'night' && countsAgainstQuota(r.date, r.slot) && monthReservations.filter(rx => countsAgainstQuota(rx.date, rx.slot)).indexOf(r) >= total
                   const extraCost = isDom ? (client.sunday_price || 25) : r.slot === 'night' ? client.night_price : isExtraBlockRes ? extraBlockPrice : 0
                   return (
                     <div key={r.id} className={`flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 ${isPast ? 'opacity-50' : ''}`}>
