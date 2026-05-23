@@ -644,17 +644,17 @@ const contractMonth = contract ? (
               <select value={filterYear} onChange={e => { setFilterYear(e.target.value); setFilterMonth('') }}
                 className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
                 <option value="">Todos los años</option>
-                {[...new Set(reservations.map(r => r.date.slice(0, 4)))].sort().map(y => (
+                {Array.from(new Set(reservations.map(r => r.date.slice(0, 4)))).sort().map(y => (
                   <option key={y} value={y}>{y}</option>
                 ))}
               </select>
               <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)}
                 className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
                 <option value="">Todos los meses</option>
-                {[...new Set(reservations
-                  .filter(r => !filterYear || r.date.startsWith(filterYear))
-                  .map(r => r.date.slice(5, 7))
-                )].sort().map(m => (
+                {Array.from(new Set(reservations
+  .filter(r => !filterYear || r.date.startsWith(filterYear))
+  .map(r => r.date.slice(5, 7))
+)).sort().map(m => (
                   <option key={m} value={m}>{['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][parseInt(m)-1]}</option>
                 ))}
               </select>
