@@ -123,17 +123,22 @@ setBillingMonths(bills)
     return rd >= mStart && rd <= mEnd
   }) : reservations
 
+  const pkg = PACKAGES[client.package]
   const usedQuota = monthReservations.filter(r => countsAgainstQuota(r.date, r.slot)).length
-  const nights = monthReservations.filter(r => r.slot === 'night' && !isSunday(r.date)).length
-  const sundays = monthReservations.filter(r => isSunday(r.date)).length
-  const total = PACKAGES[client.package].blocks
+  const nightSundayTurns = monthReservations
+    .filter(r => r.slot === 'night' || isSunday(r.date))
+    .sort((a, b) => a.date.localeCompare(b.date))
+  const nightSundayExtra = nightSundayTurns.slice(pkg.nightBlocks)
+  const nights = nightSundayExtra.filter(r => !isSunday(r.date)).length
+  const sundays = nightSundayExtra.filter(r => isSunday(r.date)).length
+  const remainingNight = Math.max(0, pkg.nightBlocks - nightSundayTurns.length)
+  const total = pkg.dayBlocks
   const remaining = Math.max(0, total - usedQuota)
   const extraBlocks = monthReservations.filter(r => countsAgainstQuota(r.date, r.slot)).length - total
   const extraBlocksCount = extraBlocks > 0 ? extraBlocks : 0
   const pct = Math.round((Math.min(usedQuota, total) / total) * 100)
   const dl = daysLeft(client.start_date)
   const end = getVigencyEnd(client.start_date)
-  const pkg = PACKAGES[client.package]
   const extraBlockPrice = (client as any).extra_block_price || 25
   const baseNeto = pkg.price
   const nightNeto = nights * client.night_price
@@ -156,6 +161,7 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
     .filter(r => r.slot === 'night' || isSunday(r.date))
     .map(r => ({ ...r, chargeStatus: (r as any).charge_status || 'programado' }))
     .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(pkg.nightBlocks)
 
   const isSelectedSunday = isSunday(date)
   const isSelectedNight = slot === 'night'
@@ -293,9 +299,11 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
                   </select>
                 </div>
               </div>
-              {isSelectedSunday && !isSelectedNight && <p className="text-xs text-purple-600 bg-purple-50 rounded-lg p-2 mb-3">Domingo: costo extra de <strong>{fmt$(client.sunday_price || 25)}</strong> por bloque.</p>}
-              {isSelectedNight && !isSelectedSunday && <p className="text-xs text-amber-600 bg-amber-50 rounded-lg p-2 mb-3">Noche extra: costo de <strong>{fmt$(client.night_price)}</strong> por bloque.</p>}
-              {isSelectedSunday && isSelectedNight && <p className="text-xs text-purple-600 bg-purple-50 rounded-lg p-2 mb-3">Domingo nocturno: costo extra de <strong>{fmt$(client.sunday_price || 25)}</strong> por bloque.</p>}
+              {(isSelectedSunday || isSelectedNight) && (
+                remainingNight > 0
+                  ? <p className="text-xs text-green-600 bg-green-50 rounded-lg p-2 mb-3">✓ Incluido en tu paquete ({remainingNight} turno{remainingNight === 1 ? '' : 's'} de noche/domingo disponibles este mes).</p>
+                  : <p className="text-xs text-purple-600 bg-purple-50 rounded-lg p-2 mb-3">Cupo de noche/domingo agotado: costo extra de <strong>{fmt$(isSelectedSunday ? (client.sunday_price || 25) : client.night_price)}</strong> por turno.</p>
+              )}}
               {isExtraBlock && <p className="text-xs text-blue-600 bg-blue-50 rounded-lg p-2 mb-3">Paquete agotado: se aplicará cargo extra de <strong>{fmt$(extraBlockPrice)}</strong> por este bloque adicional.</p>}
               <button onClick={makeReservation} disabled={saving || !canBook} className="w-full bg-blue-600 text-white rounded-xl py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                 {saving ? 'Confirmando…' : '📅 Confirmar reserva'}
@@ -439,7 +447,7 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
                 <div className="grid grid-cols-4 items-start">
                   <div>
                     <span className="text-slate-600">Paquete {pkg.label}</span>
-<span className="text-xs text-slate-400 block">{pkg.blocks} bloques</span>
+<span className="text-xs text-slate-400 block">{pkg.dayBlocks} día + {pkg.nightBlocks} noche/domingo</span>
 <span className={`mt-1 inline-block text-xs px-2 py-0.5 rounded-full font-medium ${pkgStatus === 'pagado' ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'}`}>
   {pkgStatus === 'pagado' ? '✓ Pagado' : '⏳ Pendiente de pago'}
 </span>
