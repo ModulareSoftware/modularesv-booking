@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase, PACKAGES, getVigencyEnd } from '@/lib/supabase'
+import { supabase, PACKAGES, getVigencyEnd, fmtDate } from '@/lib/supabase'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { client_id, date, slot } = body
+  const { client_id, date, slot, is_admin_booking } = body
   if (!client_id || !date || !slot) {
     return NextResponse.json({ error: 'Faltan campos requeridos' }, { status: 400 })
   }
@@ -56,6 +56,18 @@ export async function POST(req: NextRequest) {
     if (d < start || d > end) {
       return NextResponse.json({
         error: `Fecha fuera del período de vigencia (${client.start_date} – ${end.toISOString().slice(0, 10)})`
+      }, { status: 400 })
+    }
+  }
+
+  // Límite de reserva anticipada: máximo 2 semanas, salvo reservas creadas por el administrador
+  if (!is_admin_booking) {
+    const maxBookable = new Date()
+    maxBookable.setDate(maxBookable.getDate() + 14)
+    maxBookable.setHours(23, 59, 59, 999)
+    if (d > maxBookable) {
+      return NextResponse.json({
+        error: `Solo puedes reservar con un máximo de 2 semanas de anticipación. La fecha más lejana disponible por ahora es ${fmtDate(maxBookable)}.`
       }, { status: 400 })
     }
   }
