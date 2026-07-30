@@ -5,7 +5,7 @@ const supabaseKey  = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 export const supabase = createClient(supabaseUrl, supabaseKey)
 
-export type Package = 'premium' | 'basic' | 'lite'
+export type Package = 'elite' | 'premium' | 'basic' | 'lite'
 export type Slot    = 'morning' | 'afternoon' | 'night'
 export type DepositStatus = 'pendiente' | 'pagado' | 'devuelto' | 'retenido'
 
@@ -34,10 +34,11 @@ export interface Reservation {
   client?:    Client
 }
 
-export const PACKAGES: Record<Package, { label: string; blocks: number; price: number }> = {
-  premium: { label: 'Premium',  blocks: 10, price: 200 },
-  basic:   { label: 'Básico',   blocks: 6,  price: 160 },
-  lite:    { label: 'Lite',     blocks: 3,  price: 125 },
+export const PACKAGES: Record<Package, { label: string; dayBlocks: number; nightBlocks: number; price: number }> = {
+  elite:   { label: 'Élite',   dayBlocks: 15, nightBlocks: 7, price: 190 },
+  premium: { label: 'Premium', dayBlocks: 12, nightBlocks: 5, price: 170 },
+  basic:   { label: 'Básico',  dayBlocks: 9,  nightBlocks: 3, price: 150 },
+  lite:    { label: 'Lite',    dayBlocks: 5,  nightBlocks: 0, price: 90 },
 }
 
 export const SLOTS: Record<Slot, { label: string; time: string; emoji: string }> = {
