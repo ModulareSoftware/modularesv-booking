@@ -303,7 +303,7 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
                 remainingNight > 0
                   ? <p className="text-xs text-green-600 bg-green-50 rounded-lg p-2 mb-3">✓ Incluido en tu paquete ({remainingNight} turno{remainingNight === 1 ? '' : 's'} de noche/domingo disponibles este mes).</p>
                   : <p className="text-xs text-purple-600 bg-purple-50 rounded-lg p-2 mb-3">Cupo de noche/domingo agotado: costo extra de <strong>{fmt$(isSelectedSunday ? (client.sunday_price || 25) : client.night_price)}</strong> por turno.</p>
-              )}}
+              )}
               {isExtraBlock && <p className="text-xs text-blue-600 bg-blue-50 rounded-lg p-2 mb-3">Paquete agotado: se aplicará cargo extra de <strong>{fmt$(extraBlockPrice)}</strong> por este bloque adicional.</p>}
               <button onClick={makeReservation} disabled={saving || !canBook} className="w-full bg-blue-600 text-white rounded-xl py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                 {saving ? 'Confirmando…' : '📅 Confirmar reserva'}
