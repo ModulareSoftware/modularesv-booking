@@ -124,6 +124,11 @@ setBillingMonths(bills)
   }) : reservations
 
   const pkg = PACKAGES[client.package]
+  const maxBookableDate = (() => {
+    const d = new Date()
+    d.setDate(d.getDate() + 14)
+    return fmtDate(d)
+  })()
   const usedQuota = monthReservations.filter(r => countsAgainstQuota(r.date, r.slot)).length
   const nightSundayTurns = monthReservations
     .filter(r => r.slot === 'night' || isSunday(r.date))
@@ -287,7 +292,7 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
               <div className="grid grid-cols-2 gap-3 mb-3">
                 <div>
                   <label className="text-xs text-slate-500 mb-1 block">Fecha</label>
-                  <input type="date" min={fmtDate(new Date())} value={date} onChange={e => setDate(e.target.value)} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
+                  <input type="date" min={fmtDate(new Date())} max={maxBookableDate} value={date} onChange={e => setDate(e.target.value)} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
                   {date && <div className="text-xs text-slate-400 mt-1">{new Date(date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}</div>}
                 </div>
                 <div>
@@ -299,6 +304,7 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
                   </select>
                 </div>
               </div>
+              <p className="text-xs text-slate-400 mb-3">📅 Puedes reservar con hasta 2 semanas de anticipación — la fecha más lejana disponible hoy es el {new Date(maxBookableDate + 'T12:00:00').toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}. Vuelve más adelante para reservar fechas posteriores.</p>
               {(isSelectedSunday || isSelectedNight) && (
                 remainingNight > 0
                   ? <p className="text-xs text-green-600 bg-green-50 rounded-lg p-2 mb-3">✓ Incluido en tu paquete ({remainingNight} turno{remainingNight === 1 ? '' : 's'} de noche/domingo disponibles este mes).</p>
