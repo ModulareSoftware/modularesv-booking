@@ -113,10 +113,10 @@ setContracts(await conRes.json())
     const used = clientRes.filter(r => countsAgainstQuota(r.date, r.slot)).length
     const nights = clientRes.filter(r => r.slot === 'night' && !isSunday(r.date)).length
     const sundays = clientRes.filter(r => isSunday(r.date)).length
-    const total = PACKAGES[c.package].blocks
+    const total = PACKAGES[c.package].dayBlocks
     return { used, nights, sundays, total, remaining: total - used }
   }
-
+  
   function getClientBilling(c: Client, monthNum?: number) {
     const pkg = PACKAGES[c.package]
     const contract = contracts.find(ct => ct.client_id === c.id && ct.status === 'active')
@@ -134,11 +134,15 @@ setContracts(await conRes.json())
       })
     }
 
-    const nights = clientRes.filter(r => r.slot === 'night' && !isSunday(r.date)).length
-    const sundays = clientRes.filter(r => isSunday(r.date)).length
     const usedQuota = clientRes.filter(r => countsAgainstQuota(r.date, r.slot)).length
-    const extraBlocks = Math.max(0, usedQuota - pkg.blocks)
+    const extraBlocks = Math.max(0, usedQuota - pkg.dayBlocks)
     const extraBlockPrice = (c as any).extra_block_price || 25
+    const nightSundayTurns = clientRes
+      .filter(r => r.slot === 'night' || isSunday(r.date))
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(pkg.nightBlocks)
+    const nights = nightSundayTurns.filter(r => !isSunday(r.date)).length
+    const sundays = nightSundayTurns.filter(r => isSunday(r.date)).length
     const baseNeto = pkg.price
     const nightNeto = nights * c.night_price
     const sundayNeto = sundays * (c.sunday_price || 25)
@@ -265,7 +269,7 @@ const pkgStatus = billingMonth?.package_status || 'pendiente'
   const mStart = new Date(contract[`month${selectedMonth}_start`] + 'T00:00:00')
   const mEnd = new Date(contract[`month${selectedMonth}_end`] + 'T23:59:59')
   return rd >= mStart && rd <= mEnd
-})
+}).slice(pkg.nightBlocks)
   const extraBlockRes = billingReservations(c.id).filter(r => {
   if (!countsAgainstQuota(r.date, r.slot)) return false
   if (!contract) return true
@@ -273,7 +277,7 @@ const pkgStatus = billingMonth?.package_status || 'pendiente'
   const mStart = new Date(contract[`month${selectedMonth}_start`] + 'T00:00:00')
   const mEnd = new Date(contract[`month${selectedMonth}_end`] + 'T23:59:59')
   return rd >= mStart && rd <= mEnd
-}).slice(PACKAGES[c.package].blocks)  
+}).slice(pkg.dayBlocks)
   const today = new Date().toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
   const html = `<!DOCTYPE html>
@@ -326,7 +330,7 @@ const pkgStatus = billingMonth?.package_status || 'pendiente'
     <tbody>
       <tr>
         <td>
-          Paquete ${pkg.label} (${pkg.blocks} bloques)
+          Paquete ${pkg.label} (${pkg.dayBlocks} turnos de día + ${pkg.nightBlocks} de noche/domingo)
           <br/><span class="badge ${pkgStatus === 'pagado' ? 'pagado' : 'pendiente'}">${pkgStatus === 'pagado' ? '✓ Pagado' : '⏳ Pendiente'}</span>
         </td>
         <td class="right">$${b.baseNeto.toFixed(2)}</td>
@@ -878,7 +882,7 @@ const extraRes = getExtraReservations(c).filter(r => {
   const mStart = new Date(contract[`month${selectedMonth}_start`] + 'T00:00:00')
   const mEnd = new Date(contract[`month${selectedMonth}_end`] + 'T23:59:59')
   return rd >= mStart && rd <= mEnd
-})
+}).slice(pkg.nightBlocks)
 const pendingExtras = extraRes.filter(r => r.chargeStatus === 'por_cobrar').length
 
               return (
@@ -933,7 +937,7 @@ const pendingExtras = extraRes.filter(r => r.chargeStatus === 'por_cobrar').leng
                     <div className="grid grid-cols-5 px-3 py-2.5 text-sm border-b border-slate-50 items-center">
                       <div className="col-span-2">
                         <span className="text-slate-600">Paquete {pkg.label}</span>
-                        <span className="text-xs text-slate-400 block">{pkg.blocks} bloques</span>
+                        <span className="text-xs text-slate-400 block">{pkg.dayBlocks} día + {pkg.nightBlocks} noche/domingo</span>
                         <button onClick={() => togglePackageStatus(c, selectedMonth)}
                           className={`mt-1 text-xs px-2 py-0.5 rounded-full font-medium cursor-pointer transition-all ${pkgStatus === 'pagado' ? 'bg-green-50 text-green-600 hover:bg-green-100' : 'bg-amber-50 text-amber-600 hover:bg-amber-100'}`}>
                           {pkgStatus === 'pagado' ? '✓ Pagado' : '⏳ Pendiente'} — clic para cambiar
@@ -1025,7 +1029,7 @@ const pendingExtras = extraRes.filter(r => r.chargeStatus === 'por_cobrar').leng
         const mStart = new Date(contract[`month${selectedMonth}_start`] + 'T00:00:00')
         const mEnd = new Date(contract[`month${selectedMonth}_end`] + 'T23:59:59')
         return rd >= mStart && rd <= mEnd
-      }).slice(PACKAGES[c.package].blocks).map(r => (
+      }).slice(PACKAGES[c.package].dayBlocks).map(r => (
         <div key={r.id} className="flex items-center gap-2 text-xs">
           <span className="text-slate-400">{new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit' })}</span>
           <span className="flex-1" />
@@ -1270,9 +1274,10 @@ function NewClientModal({ onClose, onSave }: { onClose: () => void; onSave: (d: 
   <div>
     <label className="text-xs text-slate-500">Paquete</label>
     <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" value={form.package} onChange={e => set('package', e.target.value)}>
-      <option value="premium">🥇 Premium — 10 bloques</option>
-      <option value="basic">🥈 Básico — 6 bloques</option>
-      <option value="lite">🥉 Lite — 3 bloques</option>
+      <option value="elite">👑 Élite — 15 día + 7 noche/domingo</option>
+      <option value="premium">🥇 Premium — 12 día + 5 noche/domingo</option>
+      <option value="basic">🥈 Básico — 9 día + 3 noche/domingo</option>
+      <option value="lite">🥉 Lite — 5 día</option>
     </select>
   </div>
   <div>
@@ -1468,7 +1473,7 @@ function NewReservationModal({ clients, reservations, contracts, defaultDate, de
       const rd = new Date(r.date + 'T12:00:00')
       return rd >= new Date(monthStart! + 'T00:00:00') && rd <= new Date(monthEnd! + 'T23:59:59')
     }).length
-    const total = PACKAGES[selectedClient.package as keyof typeof PACKAGES].blocks
+    const total = PACKAGES[selectedClient.package as keyof typeof PACKAGES].dayBlocks
     return usedQuota >= total
   })()
 
