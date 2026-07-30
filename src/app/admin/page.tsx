@@ -1384,9 +1384,10 @@ function EditClientModal({ client, onClose, onSave }: { client: Client; onClose:
   <div>
     <label className="text-xs text-slate-500">Paquete</label>
     <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" value={form.package} onChange={e => { set('package', e.target.value); set('deposit_amount', PACKAGES[e.target.value as keyof typeof PACKAGES].price * 0.5) }}>
-      <option value="premium">🥇 Premium — 10 bloques</option>
-      <option value="basic">🥈 Básico — 6 bloques</option>
-      <option value="lite">🥉 Lite — 3 bloques</option>
+      <option value="elite">👑 Élite — 15 día + 7 noche/domingo</option>
+      <option value="premium">🥇 Premium — 12 día + 5 noche/domingo</option>
+      <option value="basic">🥈 Básico — 9 día + 3 noche/domingo</option>
+      <option value="lite">🥉 Lite — 5 día</option>
     </select>
   </div>
   <div>
