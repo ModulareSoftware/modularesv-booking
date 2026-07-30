@@ -1521,7 +1521,7 @@ function NewReservationModal({ clients, reservations, contracts, defaultDate, de
       <div className="flex gap-2 justify-end mt-2">
         <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg hover:bg-slate-100">Cancelar</button>
         <button
-          onClick={() => onSave({ ...form, is_extra: isExtraBlock })}
+          onClick={() => onSave({ ...form, is_extra: isExtraBlock, is_admin_booking: true })}
           className={`px-4 py-2 text-sm text-white rounded-lg ${isExtraBlock ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}>
           {isExtraBlock ? '⚠️ Confirmar bloque extra' : 'Confirmar'}
         </button>
