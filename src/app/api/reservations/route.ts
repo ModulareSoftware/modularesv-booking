@@ -94,8 +94,8 @@ export async function POST(req: NextRequest) {
       new Date(r.date + 'T12:00:00').getDay() !== 0
     ).length
 
-    const total = PACKAGES[client.package as keyof typeof PACKAGES].blocks
-
+    const total = PACKAGES[client.package as keyof typeof PACKAGES].dayBlocks
+    
     if (usedQuota >= total && !body.is_extra) {
       return NextResponse.json({
         error: `Sin bloques disponibles (${usedQuota}/${total} usados este mes)`
