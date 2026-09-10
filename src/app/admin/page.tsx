@@ -108,8 +108,23 @@ setContracts(await conRes.json())
     return reservations.filter(r => r.date === dateStr)
   }
 
-  function getClientUsage(c: Client) {
-    const clientRes = reservations.filter(r => r.client_id === c.id)
+    function getClientUsage(c: Client) {
+    const contract = contracts.find(ct => ct.client_id === c.id && ct.status === 'active')
+    let clientRes = reservations.filter(r => r.client_id === c.id)
+    if (contract) {
+      for (const m of [1, 2, 3]) {
+        const mStart = new Date(contract[`month${m}_start`] + 'T00:00:00')
+        const mEnd = new Date(contract[`month${m}_end`] + 'T23:59:59')
+        const today = new Date()
+        if (today >= mStart && today <= mEnd) {
+          clientRes = clientRes.filter(r => {
+            const rd = new Date(r.date + 'T12:00:00')
+            return rd >= mStart && rd <= mEnd
+          })
+          break
+        }
+      }
+    }
     const used = clientRes.filter(r => countsAgainstQuota(r.date, r.slot)).length
     const nights = clientRes.filter(r => r.slot === 'night' && !isSunday(r.date)).length
     const sundays = clientRes.filter(r => isSunday(r.date)).length
