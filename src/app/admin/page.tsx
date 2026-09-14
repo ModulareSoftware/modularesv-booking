@@ -625,8 +625,8 @@ const contractMonth = contract ? (
   today2 >= new Date(contract.month3_start) && today2 <= new Date(contract.month3_end + 'T23:59:59') ? 3 : null
 ) : null
                 const pct = Math.round((used / total) * 100)
-                const dl = daysLeft(c.start_date)
-                const end = getVigencyEnd(c.start_date)
+                const end = contract ? new Date(contract.month3_end + 'T23:59:59') : getVigencyEnd(c.start_date)
+                const dl = contract ? Math.max(0, Math.ceil((end.getTime() - today2.getTime()) / 86400000)) : daysLeft(c.start_date)
                 const pkg = PACKAGES[c.package]
                 const depStatus = DEPOSIT_STATUS[c.deposit_status]
                 return (
