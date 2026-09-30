@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase, Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getVigencyEnd, ADMIN_EMAIL, isSunday, countsAgainstQuota, displayName, fmt$, DEPOSIT_STATUS } from '@/lib/supabase'
+import { supabase, Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getVigencyEnd, ADMIN_EMAIL, isSunday, countsAgainstQuota, displayName, fmt$, DEPOSIT_STATUS, quotaDate } from '@/lib/supabase'
 
 const IVA = 0.13
 const DAYS_SHORT = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
@@ -22,6 +22,7 @@ export default function PortalPage() {
   const [loading, setLoading] = useState(true)
   const [portalTab, setPortalTab] = useState<'reservas' | 'calendario' | 'facturacion'>('reservas')
   const [calMonthOffset, setCalMonthOffset] = useState(0)
+  const [useAdvance, setUseAdvance] = useState(false)
 
   useEffect(() => {
     async function init() {
@@ -78,12 +79,13 @@ setBillingMonths(bills)
     const res = await fetch('/api/reservations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ client_id: client.id, date, slot, is_extra: isExtraBlock }),
+      body: JSON.stringify({ client_id: client.id, date, slot, is_extra: isExtraBlock && !willAdvance, use_next_month: willAdvance }),
     })
     const json = await res.json()
     setSaving(false)
     if (!res.ok) { setAlert({ type: 'err', msg: json.error }); return }
-    setAlert({ type: 'ok', msg: `✅ Reserva confirmada: ${new Date(json.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })} · ${SLOTS[json.slot as keyof typeof SLOTS].label}` })
+    setUseAdvance(false)
+    setAlert({ type: 'ok', msg: `✅ Reserva confirmada${json.advance_month_start ? ' (adelantada del mes siguiente)' : ''}: ${new Date(json.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })} · ${SLOTS[json.slot as keyof typeof SLOTS].label}` })
     loadClientData(client.id)
   }
 
@@ -117,7 +119,7 @@ setBillingMonths(bills)
 
   // Filtrar reservas por mes del contrato seleccionado
   const monthReservations = contract ? reservations.filter(r => {
-    const rd = new Date(r.date + 'T12:00:00')
+    const rd = new Date(quotaDate(r) + 'T12:00:00')
     const mStart = new Date(contract[`month${selectedContractMonth}_start`] + 'T00:00:00')
     const mEnd = new Date(contract[`month${selectedContractMonth}_end`] + 'T23:59:59')
     return rd >= mStart && rd <= mEnd
@@ -172,6 +174,16 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
   const isSelectedNight = slot === 'night'
   const isExtraBlock = !isSelectedSunday && !isSelectedNight && remaining <= 0 && (slot === 'morning' || slot === 'afternoon') && !isSunday(date)
   const canBook = isSelectedSunday || isSelectedNight || remaining > 0 || isExtraBlock
+
+  // Adelantar turno del mes siguiente (solo clientes habilitados)
+  const dateContractMonth = contract ? ([1, 2, 3].find(m => date >= contract[`month${m}_start`] && date <= contract[`month${m}_end`]) || null) : null
+  const nextMonthNum = dateContractMonth && dateContractMonth < 3 ? dateContractMonth + 1 : null
+  const nextMonthAvailable = nextMonthNum ? Math.max(0, total - reservations.filter(r => {
+    const q = quotaDate(r)
+    return countsAgainstQuota(r.date, r.slot) && q >= contract[`month${nextMonthNum}_start`] && q <= contract[`month${nextMonthNum}_end`]
+  }).length) : 0
+  const canAdvance = !!client.allow_advance && isExtraBlock && nextMonthAvailable > 0
+  const willAdvance = canAdvance && useAdvance
 
   // Mes actual del contrato
   const today2 = new Date()
@@ -310,7 +322,20 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
                   ? <p className="text-xs text-green-600 bg-green-50 rounded-lg p-2 mb-3">✓ Incluido en tu paquete ({remainingNight} turno{remainingNight === 1 ? '' : 's'} de noche/domingo disponibles este mes).</p>
                   : <p className="text-xs text-purple-600 bg-purple-50 rounded-lg p-2 mb-3">Cupo de noche/domingo agotado: costo extra de <strong>{fmt$(isSelectedSunday ? (client.sunday_price || 25) : client.night_price)}</strong> por turno.</p>
               )}
-              {isExtraBlock && <p className="text-xs text-blue-600 bg-blue-50 rounded-lg p-2 mb-3">Paquete agotado: se aplicará cargo extra de <strong>{fmt$(extraBlockPrice)}</strong> por este bloque adicional.</p>}
+              {isExtraBlock && !canAdvance && <p className="text-xs text-blue-600 bg-blue-50 rounded-lg p-2 mb-3">Paquete agotado: se aplicará cargo extra de <strong>{fmt$(extraBlockPrice)}</strong> por este bloque adicional.</p>}
+              {canAdvance && (
+                <div className="mb-3 space-y-2">
+                  <p className="text-xs text-slate-500">Ya usaste todos los bloques de este mes. ¿Cómo quieres reservar este turno?</p>
+                  <button type="button" onClick={() => setUseAdvance(false)} className={`w-full text-left rounded-xl border p-2.5 text-xs transition-all ${!useAdvance ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-blue-300'}`}>
+                    <span className="font-semibold text-slate-700 block">💵 Bloque extra</span>
+                    <span className="text-slate-500">Se aplicará un cargo adicional de <strong>{fmt$(extraBlockPrice)}</strong>+IVA.</span>
+                  </button>
+                  <button type="button" onClick={() => setUseAdvance(true)} className={`w-full text-left rounded-xl border p-2.5 text-xs transition-all ${useAdvance ? 'border-purple-500 bg-purple-50' : 'border-slate-200 hover:border-purple-300'}`}>
+                    <span className="font-semibold text-slate-700 block">⏩ Usar un turno del Mes {nextMonthNum}/3</span>
+                    <span className="text-slate-500">Sin costo extra. Se descontará del próximo mes: tendrás {nextMonthAvailable - 1} de {total} disponibles al iniciar el Mes {nextMonthNum}/3.</span>
+                  </button>
+                </div>
+              )}
               <button onClick={makeReservation} disabled={saving || !canBook} className="w-full bg-blue-600 text-white rounded-xl py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                 {saving ? 'Confirmando…' : '📅 Confirmar reserva'}
               </button>
@@ -352,6 +377,7 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
   return null
 })()}
                         {isDom && <span className="ml-1 text-xs text-purple-600">· dom</span>}
+                        {r.advance_month_start && <span className="ml-1 text-xs px-1.5 py-0.5 rounded font-medium bg-purple-50 text-purple-600">⏩ del mes siguiente</span>}
                         {extraCost > 0 && <span className="ml-2 text-xs text-amber-600">+{fmt$(extraCost)}</span>}
                         {isPast && <span className="ml-2 text-xs text-slate-300">pasado</span>}
                       </div>
