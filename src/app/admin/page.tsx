@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase, Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getVigencyEnd, ADMIN_EMAIL, isSunday, countsAgainstQuota, displayName, fmt$, DEPOSIT_STATUS, DepositStatus } from '@/lib/supabase'
+import { supabase, Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getVigencyEnd, ADMIN_EMAIL, isSunday, countsAgainstQuota, displayName, fmt$, DEPOSIT_STATUS, DepositStatus, quotaDate } from '@/lib/supabase'
 
 const ADMIN_SECRET = 'Modular2024!'
 const DAYS_ES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
@@ -118,7 +118,7 @@ setContracts(await conRes.json())
         const today = new Date()
         if (today >= mStart && today <= mEnd) {
           clientRes = clientRes.filter(r => {
-            const rd = new Date(r.date + 'T12:00:00')
+            const rd = new Date(quotaDate(r) + 'T12:00:00')
             return rd >= mStart && rd <= mEnd
           })
           break
@@ -144,7 +144,7 @@ setContracts(await conRes.json())
       const mStart = new Date(contract[`${monthKey}_start`] + 'T00:00:00')
       const mEnd = new Date(contract[`${monthKey}_end`] + 'T23:59:59')
       clientRes = clientRes.filter(r => {
-        const rd = new Date(r.date + 'T12:00:00')
+        const rd = new Date(quotaDate(r) + 'T12:00:00')
         return rd >= mStart && rd <= mEnd
       })
     }
@@ -288,7 +288,7 @@ const pkgStatus = billingMonth?.package_status || 'pendiente'
   const extraBlockRes = billingReservations(c.id).filter(r => {
   if (!countsAgainstQuota(r.date, r.slot)) return false
   if (!contract) return true
-  const rd = new Date(r.date + 'T12:00:00')
+  const rd = new Date(quotaDate(r) + 'T12:00:00')
   const mStart = new Date(contract[`month${selectedMonth}_start`] + 'T00:00:00')
   const mEnd = new Date(contract[`month${selectedMonth}_end`] + 'T23:59:59')
   return rd >= mStart && rd <= mEnd
@@ -1040,7 +1040,7 @@ const pendingExtras = extraRes.filter(r => r.chargeStatus === 'por_cobrar').leng
       {billingReservations(c.id).filter(r => {
         if (!countsAgainstQuota(r.date, r.slot)) return false
         if (!contract) return true
-        const rd = new Date(r.date + 'T12:00:00')
+        const rd = new Date(quotaDate(r) + 'T12:00:00')
         const mStart = new Date(contract[`month${selectedMonth}_start`] + 'T00:00:00')
         const mEnd = new Date(contract[`month${selectedMonth}_end`] + 'T23:59:59')
         return rd >= mStart && rd <= mEnd
@@ -1212,9 +1212,16 @@ function ClientRow({ c, contract, contractMonth, used, total, remaining, nights,
             const isCurrentM = new Date() >= mStart && new Date() <= mEnd
             const monthRes = reservations.filter((r: any) => {
               if (r.client_id !== c.id) return false
-              const rd = new Date(r.date + 'T12:00:00')
+              const rd = new Date(quotaDate(r) + 'T12:00:00')
               return rd >= mStart && rd <= mEnd
             })
+            // Turnos adelantados: tomados en este mes pero descontados del siguiente, y los recibidos del anterior
+            const advancedOut = reservations.filter((r: any) => {
+              if (r.client_id !== c.id || !r.advance_month_start) return false
+              const rd = new Date(r.date + 'T12:00:00')
+              return rd >= mStart && rd <= mEnd
+            }).length
+            const advancedIn = monthRes.filter((r: any) => r.advance_month_start).length
             const monthUsed = monthRes.filter((r: any) => countsAgainstQuota(r.date, r.slot)).length
             const monthNights = monthRes.filter((r: any) => r.slot === 'night' && !isSunday(r.date)).length
             const monthSundays = monthRes.filter((r: any) => isSunday(r.date)).length
@@ -1235,6 +1242,8 @@ function ClientRow({ c, contract, contractMonth, used, total, remaining, nights,
                   {monthNights > 0 && <span>· {monthNights} noches</span>}
                   {monthSundays > 0 && <span>· {monthSundays} domingos</span>}
                   {monthExtras > 0 && <span className="text-orange-500">· {monthExtras} extra{monthExtras > 1 ? 's' : ''}</span>}
+                  {advancedOut > 0 && <span className="text-purple-500">· +{advancedOut} tomado{advancedOut > 1 ? 's' : ''} del mes {m + 1}</span>}
+                  {advancedIn > 0 && <span className="text-purple-500">· {advancedIn} usado{advancedIn > 1 ? 's' : ''} por adelantado</span>}
                   <span className={`ml-auto font-semibold ${monthRemaining === 0 ? 'text-red-500' : monthRemaining <= 1 ? 'text-amber-500' : 'text-green-600'}`}>{monthRemaining} disp.</span>
                 </div>
                 <div className="mt-1.5 h-1.5 bg-slate-200 rounded-full overflow-hidden">
@@ -1486,7 +1495,7 @@ function NewReservationModal({ clients, reservations, contracts, defaultDate, de
       if (r.client_id !== form.client_id) return false
       if (r.slot === 'night') return false
       if (new Date(r.date + 'T12:00:00').getDay() === 0) return false
-      const rd = new Date(r.date + 'T12:00:00')
+      const rd = new Date(quotaDate(r) + 'T12:00:00')
       return rd >= new Date(monthStart! + 'T00:00:00') && rd <= new Date(monthEnd! + 'T23:59:59')
     }).length
     const total = PACKAGES[selectedClient.package as keyof typeof PACKAGES].dayBlocks
