@@ -23,6 +23,7 @@ export interface Client {
   deposit_date:   string | null
   created_at:     string
   auth_user_id?:  string | null
+  allow_advance?: boolean | null
 }
 
 export interface Reservation {
@@ -31,6 +32,7 @@ export interface Reservation {
   date:       string
   slot:       Slot
   created_at: string
+  advance_month_start?: string | null
   client?:    Client
 }
 
@@ -83,6 +85,12 @@ export function isSunday(dateStr: string): boolean {
 
 export function countsAgainstQuota(dateStr: string, slot: string): boolean {
   return !isSunday(dateStr) && slot !== 'night'
+}
+
+// Fecha que decide a qué mes del contrato cuenta una reserva para el cupo.
+// Si el turno se tomó "adelantado" del mes siguiente, cuenta en ese mes.
+export function quotaDate(r: { date: string; advance_month_start?: string | null }): string {
+  return r.advance_month_start || r.date
 }
 
 export function displayName(client: Client): string {
