@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase, PACKAGES, getVigencyEnd, fmtDate } from '@/lib/supabase'
+import { supabase, PACKAGES, getVigencyEnd, fmtDate, quotaDate } from '@/lib/supabase'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -73,11 +73,13 @@ export async function POST(req: NextRequest) {
   }
 
   const isSunday = d.getDay() === 0
+  let advanceMonthStart: string | null = null
 
   // Contar cuota solo del mes del contrato que corresponde a la fecha
   if (!isSunday && slot !== 'night') {
     let monthStart: string | null = null
     let monthEnd:   string | null = null
+    let monthNum:   number | null = null
 
     if (contract) {
       for (const m of [1, 2, 3]) {
@@ -86,6 +88,7 @@ export async function POST(req: NextRequest) {
         if (d >= ms && d <= me) {
           monthStart = contract[`month${m}_start`]
           monthEnd   = contract[`month${m}_end`]
+          monthNum   = m
           break
         }
       }
@@ -94,21 +97,38 @@ export async function POST(req: NextRequest) {
       monthEnd   = getVigencyEnd(client.start_date).toISOString().slice(0, 10)
     }
 
+    // Reservas de día (no domingo) del cliente; cada una cuenta en el mes de su quotaDate
     const { data: allRes } = await supabase
       .from('reservations')
-      .select('date, slot')
+      .select('date, slot, advance_month_start')
       .eq('client_id', client_id)
       .neq('slot', 'night')
-      .gte('date', monthStart)
-      .lte('date', monthEnd)
+    const dayRes = (allRes || []).filter(r => new Date(r.date + 'T12:00:00').getDay() !== 0)
+    const countIn = (from: string, to: string) =>
+      dayRes.filter(r => { const q = quotaDate(r); return q >= from && q <= to }).length
 
-    const usedQuota = (allRes || []).filter(r =>
-      new Date(r.date + 'T12:00:00').getDay() !== 0
-    ).length
-
+    const usedQuota = countIn(monthStart!, monthEnd!)
     const total = PACKAGES[client.package as keyof typeof PACKAGES].dayBlocks
-    
-    if (usedQuota >= total && !body.is_extra) {
+
+    if (body.use_next_month) {
+      // Adelantar un turno del mes siguiente (solo clientes habilitados)
+      if (!client.allow_advance) {
+        return NextResponse.json({ error: 'Este cliente no tiene habilitado adelantar turnos del mes siguiente' }, { status: 403 })
+      }
+      if (!contract || !monthNum || monthNum >= 3) {
+        return NextResponse.json({ error: 'No hay un mes siguiente en el contrato del cual adelantar turnos' }, { status: 400 })
+      }
+      if (usedQuota < total) {
+        return NextResponse.json({ error: 'Aún tienes bloques disponibles en este mes; usa esos primero' }, { status: 400 })
+      }
+      const nextStart = contract[`month${monthNum + 1}_start`]
+      const nextEnd   = contract[`month${monthNum + 1}_end`]
+      const nextUsed  = countIn(nextStart, nextEnd)
+      if (nextUsed >= total) {
+        return NextResponse.json({ error: `El mes siguiente ya no tiene bloques disponibles para adelantar (${nextUsed}/${total})` }, { status: 400 })
+      }
+      advanceMonthStart = nextStart
+    } else if (usedQuota >= total && !body.is_extra) {
       return NextResponse.json({
         error: `Sin bloques disponibles (${usedQuota}/${total} usados este mes)`
       }, { status: 400 })
@@ -118,7 +138,7 @@ export async function POST(req: NextRequest) {
   // Insert
   const { data, error } = await supabase
     .from('reservations')
-    .insert({ client_id, date, slot })
+    .insert(advanceMonthStart ? { client_id, date, slot, advance_month_start: advanceMonthStart } : { client_id, date, slot })
     .select('*, client:clients(*)')
     .single()
   if (error) {
