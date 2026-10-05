@@ -31,13 +31,16 @@ export async function POST(req: NextRequest) {
     .single()
   if (cErr || !client) return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 })
 
-  // Buscar contrato activo
-  const { data: contract } = await supabase
+  // Buscar el contrato que cubre la fecha (vigente o renovación ya registrada)
+  const { data: clientContracts } = await supabase
     .from('contracts')
     .select('*')
     .eq('client_id', client_id)
-    .eq('status', 'active')
-    .single()
+    .in('status', ['active', 'upcoming'])
+    .order('month1_start', { ascending: true })
+  const contract = (clientContracts || []).find((c: any) => date >= c.month1_start && date <= c.month3_end)
+    || (clientContracts || []).find((c: any) => c.status === 'active')
+    || null
 
   const d = new Date(date + 'T12:00:00')
 
@@ -108,7 +111,7 @@ export async function POST(req: NextRequest) {
       dayRes.filter(r => { const q = quotaDate(r); return q >= from && q <= to }).length
 
     const usedQuota = countIn(monthStart!, monthEnd!)
-    const total = PACKAGES[client.package as keyof typeof PACKAGES].dayBlocks
+    const total = PACKAGES[(contract?.package || client.package) as keyof typeof PACKAGES].dayBlocks
 
     if (body.use_next_month) {
       // Adelantar un turno del mes siguiente (solo clientes habilitados)
