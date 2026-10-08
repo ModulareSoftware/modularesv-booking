@@ -1,7 +1,8 @@
 'use client'
-import { useState, Suspense } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, ADMIN_EMAIL } from '@/lib/supabase'
+import InstallPrompt from '@/components/InstallPrompt'
 
 function LoginForm() {
   const router = useRouter()
@@ -11,6 +12,15 @@ function LoginForm() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
+  // Si ya hay sesión abierta (por ejemplo al abrir la app instalada), entrar directo
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const user = session?.user
+      if (!user) return
+      router.replace(user.email === ADMIN_EMAIL ? '/admin' : '/portal')
+    })
+  }, [router])
+  
   async function handleLogin() {
     setLoading(true)
     setError('')
@@ -102,6 +112,9 @@ function LoginForm() {
           </button>
         </div>
 
+        <div className="mt-4">
+          <InstallPrompt />
+        </div>
         <p className="text-center text-xs text-slate-300 mt-6">modularesv.com</p>
       </div>
     </main>
