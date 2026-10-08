@@ -20,7 +20,7 @@ function LoginForm() {
       router.replace(user.email === ADMIN_EMAIL ? '/admin' : '/portal')
     })
   }, [router])
-  
+
   async function handleLogin() {
     setLoading(true)
     setError('')
@@ -35,15 +35,15 @@ function LoginForm() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
+    <main className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
   <img
     src="/Logo%20M%20Negro.png"
     alt="Modulare Flex Office"
-    className="w-20 h-20 object-contain mx-auto mb-4"
+    className="w-16 h-16 sm:w-20 sm:h-20 object-contain mx-auto mb-4"
   />
-  <h1 className="text-3xl font-semibold text-slate-800 mb-1" style={{ fontFamily: 'Fraunces, serif' }}>
+  <h1 className="text-2xl sm:text-3xl font-semibold text-slate-800 mb-1" style={{ fontFamily: 'Fraunces, serif' }}>
     Modulare Flex Office
   </h1>
   <p className="text-slate-400 text-sm">Sistema de reservas de espacios flexibles</p>
@@ -84,7 +84,7 @@ function LoginForm() {
               <button
                 type="button"
                 onClick={() => setShowPassword(v => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-lg"
+                className="absolute right-1 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center text-slate-400 hover:text-slate-600 text-lg"
                 tabIndex={-1}
               >
                 {showPassword ? (
@@ -106,7 +106,7 @@ function LoginForm() {
           <button
             onClick={handleLogin}
             disabled={loading || !email || !password}
-            className="w-full bg-blue-600 text-white rounded-xl py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="w-full bg-blue-600 text-white rounded-xl py-3 text-base sm:text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {loading ? 'Ingresando…' : 'Ingresar'}
           </button>
@@ -115,6 +115,7 @@ function LoginForm() {
         <div className="mt-4">
           <InstallPrompt />
         </div>
+
         <p className="text-center text-xs text-slate-300 mt-6">modularesv.com</p>
       </div>
     </main>

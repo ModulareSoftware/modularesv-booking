@@ -7,9 +7,65 @@
   --brand: #2563eb;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   @apply bg-slate-50 text-slate-800;
   font-family: 'DM Sans', sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Montos y números siempre alineados (no "bailan" de ancho) */
+body {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Ajustes para teléfono ─────────────────────────────── */
+
+/* iOS hace zoom automático al tocar un campo con letra menor a 16px.
+   Con 16px en móvil la pantalla ya no se agranda ni se sale de lugar. */
+@media (max-width: 639px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* En iPhone el campo de fecha tiene un ancho mínimo propio que lo saca de su casilla */
+input[type='date'] {
+  min-width: 0;
+  max-width: 100%;
+  display: block;
+  -webkit-appearance: none;
+  appearance: none;
+  min-height: 2.5rem;
+  background-color: #fff;
+}
+input[type='date']::-webkit-date-and-time-value {
+  text-align: left;
+}
+
+/* Los selects nunca más anchos que su contenedor */
+select {
+  max-width: 100%;
+  text-overflow: ellipsis;
+}
+
+/* Espacio para la barra de inicio del iPhone (app instalada) */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
+/* Barras de pestañas deslizables sin scrollbar visible */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 .badge {

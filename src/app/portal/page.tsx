@@ -2,6 +2,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getVigencyEnd, ADMIN_EMAIL, isSunday, countsAgainstQuota, displayName, fmt$, DEPOSIT_STATUS, quotaDate } from '@/lib/supabase'
+import { BillHeader, BillLine } from '@/components/BillLine'
+import InstallPrompt from '@/components/InstallPrompt'
 
 const IVA = 0.13
 const DAYS_SHORT = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
@@ -144,8 +146,17 @@ setBillingMonths(bills)
   const extraBlocks = monthReservations.filter(r => countsAgainstQuota(r.date, r.slot)).length - total
   const extraBlocksCount = extraBlocks > 0 ? extraBlocks : 0
   const pct = Math.round((Math.min(usedQuota, total) / total) * 100)
-  const dl = daysLeft(client.start_date)
-  const end = getVigencyEnd(client.start_date)
+  // Días restantes del mes de contrato en curso y fin de vigencia del contrato
+  // (sin contrato se mantiene el cálculo anterior de 30 días desde el inicio)
+  const nowD = new Date()
+  const curMonthEnd = contract
+    ? [1, 2, 3].map(m => new Date(contract[`month${m}_end`] + 'T23:59:59'))
+        .find((e, i) => nowD >= new Date(contract[`month${i + 1}_start`] + 'T00:00:00') && nowD <= e)
+    : null
+  const dl = contract
+    ? (curMonthEnd ? Math.max(0, Math.ceil((curMonthEnd.getTime() - nowD.getTime()) / 86400000)) : 0)
+    : daysLeft(client.start_date)
+  const end = contract ? new Date(contract.month3_end + 'T12:00:00') : getVigencyEnd(client.start_date)
   const extraBlockPrice = (client as any).extra_block_price || 25
   const baseNeto = pkg.price
   const nightNeto = nights * client.night_price
@@ -224,38 +235,40 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <nav className="bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3">
-        <div className="flex items-center gap-3">
-          <img src="/Logo%20M%20Negro.png" alt="Modulare" className="w-10 h-10 object-contain" />
-          <span className="text-xl font-semibold text-slate-800" style={{ fontFamily: 'Fraunces, serif' }}>Modulare Flex Office</span>
+      <nav className="bg-white border-b border-slate-200 px-4 py-2.5 sm:py-3 flex items-center gap-2 sm:gap-3 sticky top-0 z-30">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 mr-auto">
+          <img src="/Logo%20M%20Negro.png" alt="Modulare" className="w-8 h-8 sm:w-10 sm:h-10 object-contain flex-shrink-0" />
+          <span className="text-base sm:text-xl font-semibold text-slate-800 truncate" style={{ fontFamily: 'Fraunces, serif' }}>Modulare Flex Office</span>
         </div>
-        <span className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded-full ml-auto">Portal de clientes</span>
-        <button onClick={logout} className="text-xs text-slate-400 hover:text-slate-600">Salir</button>
+        <span className="hidden sm:inline text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded-full">Portal de clientes</span>
+        <button onClick={logout} className="text-xs text-slate-400 hover:text-slate-600 px-1 py-2 flex-shrink-0">Salir</button>
       </nav>
 
-      <div className="max-w-lg mx-auto p-4 space-y-4">
+      <div className="max-w-lg mx-auto p-3 sm:p-4 space-y-3 sm:space-y-4 pb-safe">
+        <InstallPrompt />
 
         {/* Summary */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-4">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-11 h-11 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-semibold">
+        <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4">
+          <div className="flex items-start gap-3 mb-3">
+            <div className="w-11 h-11 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-semibold flex-shrink-0">
               {displayName(client).split(' ').map((x: string) => x[0]).slice(0, 2).join('')}
             </div>
-            <div className="flex-1">
-              <div className="font-semibold">{displayName(client)}</div>
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold leading-snug break-words">{displayName(client)}</div>
               {client.company_name && <div className="text-xs text-slate-400">{client.name}</div>}
               <div className="text-xs text-slate-400">Paquete {pkg.label} · {fmt$(pkg.price)}+IVA/mes</div>
               {contract && <div className="text-xs text-slate-500 font-medium mt-0.5">{contract.contract_number}</div>}
             </div>
-            <span className={`text-xs px-2 py-1 rounded-full font-medium ${dl <= 5 ? 'bg-amber-50 text-amber-600' : 'bg-blue-50 text-blue-600'}`}>
-              {dl}d restantes<br/><span className="text-xs font-normal">periodo en curso</span>
+            <span className={`text-xs px-2.5 py-1.5 rounded-xl font-medium text-center leading-tight flex-shrink-0 ${dl <= 5 ? 'bg-amber-50 text-amber-600' : 'bg-blue-50 text-blue-600'}`}>
+              <span className="text-base font-semibold block">{dl}d</span>
+              <span className="text-[11px] font-normal">restantes</span>
             </span>
           </div>
 
           {/* Selector de mes del contrato */}
           {contract && (
             <div className="mb-3">
-              <div className="flex gap-1 mb-1">
+              <div className="flex flex-wrap gap-1 mb-1">
                 {[1,2,3].map(m => {
                   const mStart = new Date(contract[`month${m}_start`] + 'T00:00:00')
                   const mEnd = new Date(contract[`month${m}_end`] + 'T23:59:59')
@@ -263,7 +276,7 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
                   const isSelected = selectedContractMonth === m
                   return (
                     <button key={m} onClick={() => setSelectedContractMonth(m)}
-                      className={`text-xs px-2 py-0.5 rounded-full border transition-all ${isSelected ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-200 text-slate-500 hover:border-blue-300'}`}>
+                      className={`text-xs px-2.5 py-1 rounded-full border transition-all whitespace-nowrap ${isSelected ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-200 text-slate-500 hover:border-blue-300'}`}>
                       Mes {m}/3 {isCurrentM ? '●' : ''}
                     </button>
                   )
@@ -275,12 +288,12 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
             </div>
           )}
 
-          <div className="grid grid-cols-5 gap-2">
-            <div className="bg-slate-50 rounded-xl p-3"><div className="text-xs text-slate-400 mb-1">Usados</div><div className="text-xl font-semibold">{Math.min(usedQuota, total)}/{total}</div></div>
-            <div className="bg-slate-50 rounded-xl p-3"><div className="text-xs text-slate-400 mb-1">Disponibles</div><div className={`text-xl font-semibold ${remaining === 0 ? 'text-red-500' : remaining <= 1 ? 'text-amber-500' : 'text-green-600'}`}>{remaining}</div></div>
-            <div className="bg-slate-50 rounded-xl p-3"><div className="text-xs text-slate-400 mb-1">Noches</div><div className="text-xl font-semibold">{nights}</div>{nights > 0 && <div className="text-xs text-amber-600">{fmt$(nightNeto)}</div>}</div>
-            <div className="bg-slate-50 rounded-xl p-3"><div className="text-xs text-slate-400 mb-1">Domingos</div><div className="text-xl font-semibold">{sundays}</div>{sundays > 0 && <div className="text-xs text-purple-600">{fmt$(sundayNeto)}</div>}</div>
-            <div className="bg-slate-50 rounded-xl p-3"><div className="text-xs text-slate-400 mb-1">Extras</div><div className={`text-xl font-semibold ${extraBlocksCount > 0 ? 'text-blue-600' : ''}`}>{extraBlocksCount}</div>{extraBlocksCount > 0 && <div className="text-xs text-blue-600">{fmt$(extraBlocksCount * extraBlockPrice)}</div>}</div>
+          <div className="grid grid-cols-6 sm:grid-cols-5 gap-2">
+            <div className="col-span-3 sm:col-span-1 min-w-0 bg-slate-50 rounded-xl p-3"><div className="text-xs text-slate-400 mb-1">Usados</div><div className="text-xl font-semibold">{Math.min(usedQuota, total)}/{total}</div></div>
+            <div className="col-span-3 sm:col-span-1 min-w-0 bg-slate-50 rounded-xl p-3"><div className="text-xs text-slate-400 mb-1 truncate">Disponibles</div><div className={`text-xl font-semibold ${remaining === 0 ? 'text-red-500' : remaining <= 1 ? 'text-amber-500' : 'text-green-600'}`}>{remaining}</div></div>
+            <div className="col-span-2 sm:col-span-1 min-w-0 bg-slate-50 rounded-xl p-3"><div className="text-xs text-slate-400 mb-1 truncate">Noches</div><div className="text-xl font-semibold">{nights}</div>{nights > 0 && <div className="text-xs text-amber-600">{fmt$(nightNeto)}</div>}</div>
+            <div className="col-span-2 sm:col-span-1 min-w-0 bg-slate-50 rounded-xl p-3"><div className="text-xs text-slate-400 mb-1 truncate">Domingos</div><div className="text-xl font-semibold">{sundays}</div>{sundays > 0 && <div className="text-xs text-purple-600">{fmt$(sundayNeto)}</div>}</div>
+            <div className="col-span-2 sm:col-span-1 min-w-0 bg-slate-50 rounded-xl p-3"><div className="text-xs text-slate-400 mb-1 truncate">Extras</div><div className={`text-xl font-semibold ${extraBlocksCount > 0 ? 'text-blue-600' : ''}`}>{extraBlocksCount}</div>{extraBlocksCount > 0 && <div className="text-xs text-blue-600">{fmt$(extraBlocksCount * extraBlockPrice)}</div>}</div>
           </div>
           <div className="mt-3 h-2 bg-slate-100 rounded-full overflow-hidden">
             <div className={`h-full rounded-full ${pct >= 100 ? 'bg-red-400' : pct >= 75 ? 'bg-amber-400' : 'bg-blue-400'}`} style={{ width: `${pct}%` }} />
@@ -290,19 +303,19 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
 
         {/* Tabs */}
         <div className="flex bg-slate-100 rounded-xl p-1 gap-1">
-          <button onClick={() => setPortalTab('reservas')} className={`flex-1 text-sm py-2 rounded-lg transition-all ${portalTab === 'reservas' ? 'bg-white shadow-sm font-medium' : 'text-slate-500'}`}>📅 Reservas</button>
-          <button onClick={() => setPortalTab('calendario')} className={`flex-1 text-sm py-2 rounded-lg transition-all ${portalTab === 'calendario' ? 'bg-white shadow-sm font-medium' : 'text-slate-500'}`}>📆 Calendario</button>
-          <button onClick={() => setPortalTab('facturacion')} className={`flex-1 text-sm py-2 rounded-lg transition-all ${portalTab === 'facturacion' ? 'bg-white shadow-sm font-medium' : 'text-slate-500'}`}>💰 Facturación</button>
+          <button onClick={() => setPortalTab('reservas')} className={`flex-1 min-w-0 text-[13px] sm:text-sm py-2.5 sm:py-2 rounded-lg transition-all whitespace-nowrap ${portalTab === 'reservas' ? 'bg-white shadow-sm font-medium' : 'text-slate-500'}`}>📅 Reservas</button>
+          <button onClick={() => setPortalTab('calendario')} className={`flex-1 min-w-0 text-[13px] sm:text-sm py-2.5 sm:py-2 rounded-lg transition-all whitespace-nowrap ${portalTab === 'calendario' ? 'bg-white shadow-sm font-medium' : 'text-slate-500'}`}>📆 Calendario</button>
+          <button onClick={() => setPortalTab('facturacion')} className={`flex-1 min-w-0 text-[13px] sm:text-sm py-2.5 sm:py-2 rounded-lg transition-all whitespace-nowrap ${portalTab === 'facturacion' ? 'bg-white shadow-sm font-medium' : 'text-slate-500'}`}>💰 Facturación</button>
         </div>
 
         {/* ── RESERVAS ── */}
         {portalTab === 'reservas' && (
           <div className="space-y-4">
-            <div className="bg-white rounded-2xl border border-slate-200 p-4">
+            <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4">
               <h3 className="font-semibold text-slate-700 mb-3">Reservar un bloque</h3>
               {alert && <div className={`text-sm rounded-xl p-3 mb-3 ${alert.type === 'ok' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{alert.msg}</div>}
-              <div className="grid grid-cols-2 gap-3 mb-3">
-                <div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                <div className="min-w-0">
                   <label className="text-xs text-slate-500 mb-1 block">Fecha</label>
                   <input type="date" min={fmtDate(new Date())} max={maxBookableDate} value={date} onChange={e => setDate(e.target.value)} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
                   {date && <div className="text-xs text-slate-400 mt-1">{new Date(date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}</div>}
@@ -336,13 +349,13 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
                   </button>
                 </div>
               )}
-              <button onClick={makeReservation} disabled={saving || !canBook} className="w-full bg-blue-600 text-white rounded-xl py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+              <button onClick={makeReservation} disabled={saving || !canBook} className="w-full bg-blue-600 text-white rounded-xl py-3 sm:py-2.5 text-base sm:text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                 {saving ? 'Confirmando…' : '📅 Confirmar reserva'}
               </button>
               {!canBook && <p className="text-xs text-red-500 text-center mt-2">No tienes bloques disponibles en tu paquete actual.</p>}
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 p-4">
+            <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4">
               <h3 className="font-semibold text-slate-700 mb-3">Mis reservas</h3>
               {reservations.length === 0 && <p className="text-slate-400 text-sm text-center py-4">Sin reservas activas</p>}
               <div className="space-y-2">
@@ -361,7 +374,7 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
                   return (
                     <div key={r.id} className={`flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 ${isPast ? 'opacity-50' : ''}`}>
                       <span className={`w-2 h-2 rounded-full flex-shrink-0 ${r.slot === 'morning' ? 'bg-blue-400' : r.slot === 'afternoon' ? 'bg-green-400' : 'bg-amber-400'}`} />
-                      <div className="flex-1 text-sm">
+                      <div className="flex-1 min-w-0 text-sm">
                         <span className="font-medium">{new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
                         <span className="text-slate-400"> · {slotInfo.label}</span>
                         {contract && (() => {
@@ -381,7 +394,7 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
                         {extraCost > 0 && <span className="ml-2 text-xs text-amber-600">+{fmt$(extraCost)}</span>}
                         {isPast && <span className="ml-2 text-xs text-slate-300">pasado</span>}
                       </div>
-                      {!isPast && <button onClick={() => cancelReservation(r.id, r.date)} className="text-xs text-slate-300 hover:text-red-400">✕</button>}
+                      {!isPast && <button onClick={() => cancelReservation(r.id, r.date)} aria-label="Cancelar reserva" className="text-sm text-slate-400 hover:text-red-400 w-9 h-9 -mr-1 flex items-center justify-center rounded-lg flex-shrink-0">✕</button>}
                     </div>
                   )
                 })}
@@ -392,14 +405,14 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
 
         {/* ── CALENDARIO ── */}
         {portalTab === 'calendario' && (
-          <div className="bg-white rounded-2xl border border-slate-200 p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4">
             <div className="flex items-center gap-2 mb-3">
               <h3 className="font-semibold text-slate-700 mr-auto">
                 {MONTHS_ES[calRef.getMonth()]} {calRef.getFullYear()}
               </h3>
-              <button onClick={() => setCalMonthOffset(o => o - 1)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400">‹</button>
-              <button onClick={() => setCalMonthOffset(0)} className="text-xs px-2 py-1 rounded-lg hover:bg-slate-100 text-slate-400">Hoy</button>
-              <button onClick={() => setCalMonthOffset(o => o + 1)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400">›</button>
+              <button onClick={() => setCalMonthOffset(o => o - 1)} aria-label="Mes anterior" className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-500 text-lg">‹</button>
+              <button onClick={() => setCalMonthOffset(0)} className="text-xs px-2 h-9 rounded-lg hover:bg-slate-100 text-slate-500">Hoy</button>
+              <button onClick={() => setCalMonthOffset(o => o + 1)} aria-label="Mes siguiente" className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-500 text-lg">›</button>
             </div>
             <div className="grid grid-cols-7 gap-0.5 mb-1">
               {DAYS_SHORT.map((d, i) => (
@@ -415,7 +428,7 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
                 const isToday = dateStr === todayStr
                 const isDom = new Date(dateStr + 'T12:00:00').getDay() === 0
                 return (
-                  <div key={dateStr} className={`rounded-lg p-1 min-h-12 flex flex-col ${isToday ? 'bg-blue-50 border border-blue-200' : isDom ? 'bg-purple-50' : 'bg-slate-50'}`}>
+                  <div key={dateStr} className={`rounded-lg p-1 min-h-12 min-w-0 flex flex-col ${isToday ? 'bg-blue-50 border border-blue-200' : isDom ? 'bg-purple-50' : 'bg-slate-50'}`}>
                     <span className={`text-xs font-semibold mb-0.5 ${isToday ? 'text-blue-600' : isDom ? 'text-purple-500' : 'text-slate-500'}`}>{day}</span>
                     <div className="flex flex-col gap-0.5">
                       {mine.map(r => (
@@ -442,18 +455,18 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
 
         {/* ── FACTURACIÓN ── */}
         {portalTab === 'facturacion' && (
-          <div className="bg-white rounded-2xl border border-slate-200 p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4">
             <div className="mb-4">
               <h3 className="font-semibold text-slate-700">Resumen de facturación</h3>
               {contract && (
                 <div className="mt-2">
-                  <div className="flex gap-1 mb-1">
+                  <div className="flex flex-wrap gap-1 mb-1">
                     {[1,2,3].map(m => {
                       const isCurrentM = currentContractMonth === m
                       const isSelected = selectedContractMonth === m
                       return (
                         <button key={m} onClick={() => setSelectedContractMonth(m)}
-                          className={`text-xs px-2 py-0.5 rounded-full border transition-all ${isSelected ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-200 text-slate-500 hover:border-blue-300'}`}>
+                          className={`text-xs px-2.5 py-1 rounded-full border transition-all whitespace-nowrap ${isSelected ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-200 text-slate-500 hover:border-blue-300'}`}>
                           Mes {m}/3 {isCurrentM ? '●' : ''}
                         </button>
                       )
@@ -466,107 +479,43 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
               )}
               {!contract && <p className="text-xs text-slate-400 mt-0.5">Mes en curso · IVA 13%</p>}
             </div>
-            <div className="grid grid-cols-3 gap-3 mb-5">
-              <div className="bg-slate-50 rounded-xl p-3"><div className="text-xs text-slate-400 mb-1">Neto</div><div className="text-lg font-semibold text-slate-700">{fmt$(totalNeto)}</div></div>
-              <div className="bg-slate-50 rounded-xl p-3"><div className="text-xs text-slate-400 mb-1">IVA 13%</div><div className="text-lg font-semibold text-slate-500">{fmt$(totalIva)}</div></div>
-              <div className="bg-blue-600 rounded-xl p-3"><div className="text-xs text-blue-200 mb-1">Total</div><div className="text-lg font-semibold text-white">{fmt$(totalConIva)}</div></div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 mb-5">
+              <div className="bg-slate-50 rounded-xl p-3 min-w-0"><div className="text-xs text-slate-400 mb-1">Neto</div><div className="text-lg font-semibold text-slate-700 truncate">{fmt$(totalNeto)}</div></div>
+              <div className="bg-slate-50 rounded-xl p-3 min-w-0"><div className="text-xs text-slate-400 mb-1">IVA 13%</div><div className="text-lg font-semibold text-slate-500 truncate">{fmt$(totalIva)}</div></div>
+              <div className="bg-blue-600 rounded-xl p-3 min-w-0 col-span-2 sm:col-span-1 flex sm:block items-center justify-between"><div className="text-xs text-blue-200 sm:mb-1">Total con IVA</div><div className="text-xl sm:text-lg font-semibold text-white truncate">{fmt$(totalConIva)}</div></div>
             </div>
             <div className="border border-slate-100 rounded-xl overflow-hidden mb-4">
-              <div className="grid grid-cols-4 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-400 border-b border-slate-100">
-                <span>Concepto</span><span className="text-right">Neto</span><span className="text-right">IVA</span><span className="text-right">Total</span>
-              </div>
-              <div className="px-3 py-2.5 text-sm border-b border-slate-50">
-                <div className="grid grid-cols-4 items-start">
-                  <div>
-                    <span className="text-slate-600">Paquete {pkg.label}</span>
-<span className="text-xs text-slate-400 block">{pkg.dayBlocks} día + {pkg.nightBlocks} noche/domingo</span>
-<span className={`mt-1 inline-block text-xs px-2 py-0.5 rounded-full font-medium ${pkgStatus === 'pagado' ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'}`}>
-  {pkgStatus === 'pagado' ? '✓ Pagado' : '⏳ Pendiente de pago'}
-</span>
-                  </div>
-                  <span className="text-right text-slate-600">{fmt$(baseNeto)}</span>
-                  <span className="text-right text-slate-400">{fmt$(baseIva)}</span>
-                  <span className="text-right font-medium">{fmt$(baseNeto + baseIva)}</span>
-                </div>
-              </div>
+              <BillHeader />
+              <BillLine label={`Paquete ${pkg.label}`} sub={`${pkg.dayBlocks} día + ${pkg.nightBlocks} noche/domingo`} neto={baseNeto} iva={baseIva}>
+                <span className={`mt-1.5 inline-block text-xs px-2 py-0.5 rounded-full font-medium ${pkgStatus === 'pagado' ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'}`}>
+                  {pkgStatus === 'pagado' ? '✓ Pagado' : '⏳ Pendiente de pago'}
+                </span>
+              </BillLine>
               {extraReservations.filter(r => r.slot === 'night' && !isSunday(r.date)).length > 0 && (
-                <div className="border-b border-slate-50">
-                  <div className="grid grid-cols-4 px-3 py-2 text-sm items-start">
-                    <div><span className="text-slate-600">Noches extra</span><span className="text-xs text-slate-400 block">{extraReservations.filter(r => r.slot === 'night' && !isSunday(r.date)).length} × {fmt$(client.night_price)}</span></div>
-                    <span className="text-right text-slate-600">{fmt$(nightNeto)}</span>
-                    <span className="text-right text-slate-400">{fmt$(nightIva)}</span>
-                    <span className="text-right font-medium">{fmt$(nightNeto + nightIva)}</span>
-                  </div>
-                  <div className="px-3 pb-2 space-y-1">
-                    {extraReservations.filter(r => r.slot === 'night' && !isSunday(r.date)).map(r => {
-                      const cs = chargeStatusLabel(r.chargeStatus)
-                      return (
-                        <div key={r.id} className="flex items-center gap-2 text-xs">
-                          <span className="text-slate-400">{new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit' })}</span>
-                          <span className="flex-1" />
-                          <span className={`px-2 py-0.5 rounded-full font-medium ${cs.color}`}>{cs.label}</span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
+                <BillLine label="Noches extra" sub={`${extraReservations.filter(r => r.slot === 'night' && !isSunday(r.date)).length} × ${fmt$(client.night_price)}`} neto={nightNeto} iva={nightIva}
+                  details={extraReservations.filter(r => r.slot === 'night' && !isSunday(r.date)).map(r => (
+                    <StatusRow key={r.id} date={r.date} status={chargeStatusLabel(r.chargeStatus)} />
+                  ))} />
               )}
               {extraReservations.filter(r => isSunday(r.date)).length > 0 && (
-                <div className="border-b border-slate-50">
-                  <div className="grid grid-cols-4 px-3 py-2 text-sm items-start">
-                    <div><span className="text-slate-600">Domingos</span><span className="text-xs text-slate-400 block">{extraReservations.filter(r => isSunday(r.date)).length} × {fmt$(client.sunday_price || 25)}</span></div>
-                    <span className="text-right text-slate-600">{fmt$(sundayNeto)}</span>
-                    <span className="text-right text-slate-400">{fmt$(sundayIva)}</span>
-                    <span className="text-right font-medium">{fmt$(sundayNeto + sundayIva)}</span>
-                  </div>
-                  <div className="px-3 pb-2 space-y-1">
-                    {extraReservations.filter(r => isSunday(r.date)).map(r => {
-                      const cs = chargeStatusLabel(r.chargeStatus)
-                      return (
-                        <div key={r.id} className="flex items-center gap-2 text-xs">
-                          <span className="text-slate-400">{new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit' })}</span>
-                          <span className="flex-1" />
-                          <span className={`px-2 py-0.5 rounded-full font-medium ${cs.color}`}>{cs.label}</span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
+                <BillLine label="Domingos" sub={`${extraReservations.filter(r => isSunday(r.date)).length} × ${fmt$(client.sunday_price || 25)}`} neto={sundayNeto} iva={sundayIva}
+                  details={extraReservations.filter(r => isSunday(r.date)).map(r => (
+                    <StatusRow key={r.id} date={r.date} status={chargeStatusLabel(r.chargeStatus)} />
+                  ))} />
               )}
               {extraBlocksCount > 0 && (
-                <div className="border-b border-slate-50">
-                  <div className="grid grid-cols-4 px-3 py-2 text-sm items-start">
-                    <div><span className="text-slate-600">Bloques extra</span><span className="text-xs text-slate-400 block">{extraBlocksCount} × {fmt$(extraBlockPrice)}</span></div>
-                    <span className="text-right text-slate-600">{fmt$(extraBlockNeto)}</span>
-                    <span className="text-right text-slate-400">{fmt$(extraBlockNeto * 0.13)}</span>
-                    <span className="text-right font-medium">{fmt$(extraBlockNeto * 1.13)}</span>
-                  </div>
-                  <div className="px-3 pb-2 space-y-1">
-                    {monthReservations.filter(r => countsAgainstQuota(r.date, r.slot)).slice(total).map(r => {
-                      const cs = chargeStatusLabel((r as any).charge_status || 'programado')
-                      return (
-                        <div key={r.id} className="flex items-center gap-2 text-xs">
-                          <span className="text-slate-400">{new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit' })}</span>
-                          <span className="flex-1" />
-                          <span className={`px-2 py-0.5 rounded-full font-medium ${cs.color}`}>{cs.label}</span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
+                <BillLine label="Bloques extra" sub={`${extraBlocksCount} × ${fmt$(extraBlockPrice)}`} neto={extraBlockNeto} iva={extraBlockNeto * 0.13}
+                  details={monthReservations.filter(r => countsAgainstQuota(r.date, r.slot)).slice(total).map(r => (
+                    <StatusRow key={r.id} date={r.date} status={chargeStatusLabel((r as any).charge_status || 'programado')} />
+                  ))} />
               )}
-              <div className="grid grid-cols-4 px-3 py-2.5 text-sm bg-slate-50 font-semibold">
-                <span className="text-slate-700">Total mes</span>
-                <span className="text-right text-slate-700">{fmt$(totalNeto)}</span>
-                <span className="text-right text-slate-500">{fmt$(totalIva)}</span>
-                <span className="text-right text-blue-600">{fmt$(totalConIva)}</span>
-              </div>
+              <BillLine total label="Total mes" neto={totalNeto} iva={totalIva} />
             </div>
             {client.deposit_amount > 0 && depStatus && (
               <div className={`rounded-xl border p-3 ${client.deposit_status === 'pagado' ? 'border-green-100 bg-green-50' : client.deposit_status === 'devuelto' ? 'border-blue-100 bg-blue-50' : client.deposit_status === 'retenido' ? 'border-red-100 bg-red-50' : 'border-amber-100 bg-amber-50'}`}>
                 <div className="flex items-center gap-3">
-                  <span className="text-2xl">🔒</span>
-                  <div className="flex-1">
+                  <span className="text-2xl flex-shrink-0">🔒</span>
+                  <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm">Depósito de garantía</div>
                     <div className="text-xs text-slate-500 mt-0.5">
                       {client.deposit_status === 'pendiente' && 'Pendiente de pago — comunícate con tu administrador.'}
@@ -575,8 +524,8 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
                       {client.deposit_status === 'retenido' && 'Depósito retenido por no cumplir el contrato mínimo de 3 meses.'}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="font-semibold text-sm">{fmt$(client.deposit_amount)}</div>
+                  <div className="text-right flex-shrink-0">
+                    <div className="font-semibold text-sm whitespace-nowrap">{fmt$(client.deposit_amount)}</div>
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${depStatus.color}`}>{depStatus.label}</span>
                   </div>
                 </div>
@@ -587,6 +536,16 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
         )}
 
       </div>
+    </div>
+  )
+}
+
+function StatusRow({ date, status }: { date: string; status: { label: string; color: string } }) {
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="text-slate-400">{new Date(date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit' })}</span>
+      <span className="flex-1" />
+      <span className={`px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${status.color}`}>{status.label}</span>
     </div>
   )
 }
