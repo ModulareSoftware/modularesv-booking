@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getVigencyEnd, ADMIN_EMAIL, isSunday, countsAgainstQuota, displayName, fmt$, DEPOSIT_STATUS, DepositStatus, quotaDate } from '@/lib/supabase'
+import { BillHeader, BillLine } from '@/components/BillLine'
 
 const ADMIN_SECRET = 'Modular2024!'
 const DAYS_ES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
@@ -44,6 +45,7 @@ const [filterMonth, setFilterMonth] = useState('')
 const [selectedContractMonth, setSelectedContractMonth] = useState<Record<string, number>>({})
   const [alert, setAlert] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null)
 const [contracts, setContracts] = useState<any[]>([])
+  const [mobileDay, setMobileDay] = useState<string | null>(null)
 
   useEffect(() => {
     async function checkAuth() {
@@ -454,40 +456,55 @@ const totalIvaMes = totalNetoMes * IVA
 const totalConIvaMes = totalNetoMes * (1 + IVA)
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <nav className="bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-3 mr-auto">
+    <div className="min-h-screen bg-slate-50 pb-24 sm:pb-0">
+      <nav className="bg-white border-b border-slate-200 px-4 py-2.5 sm:py-3 flex items-center gap-2 sm:gap-3 sticky top-0 z-30">
+        <div className="flex items-center gap-2 sm:gap-3 mr-auto min-w-0">
   <img
     src="/Logo%20M%20Negro.png"
     alt="Modulare"
-    className="w-10 h-10 object-contain"
+    className="w-8 h-8 sm:w-10 sm:h-10 object-contain flex-shrink-0"
   />
-  <span className="text-xl font-semibold text-slate-800" style={{ fontFamily: 'Fraunces, serif' }}>Modulare Flex Office</span>
+  <span className="text-base sm:text-xl font-semibold text-slate-800 truncate" style={{ fontFamily: 'Fraunces, serif' }}>Modulare Flex Office</span>
 </div>
-        <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full">Admin</span>
+        <span className="hidden sm:inline text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full">Admin</span>
+        <div className="hidden sm:flex items-center gap-1">
         {(['calendar', 'clients', 'reservations', 'billing'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`text-sm px-3 py-1.5 rounded-lg transition-all ${tab === t ? 'bg-slate-100 font-medium' : 'text-slate-500 hover:text-slate-700'}`}>
             {t === 'calendar' ? '📅 Calendario' : t === 'clients' ? '👥 Clientes' : t === 'reservations' ? '📋 Reservas' : '💰 Facturación'}
           </button>
         ))}
-        <button onClick={() => setShowNewClient(true)} className="bg-blue-600 text-white text-sm px-3 py-1.5 rounded-lg hover:bg-blue-700">+ Cliente</button>
-        <button onClick={logout} className="text-xs text-slate-400 hover:text-slate-600">Salir</button>
+        </div>
+        <button onClick={() => setShowNewClient(true)} className="bg-blue-600 text-white text-sm px-3 py-1.5 rounded-lg hover:bg-blue-700 flex-shrink-0 whitespace-nowrap">+ Cliente</button>
+        <button onClick={logout} className="text-xs text-slate-400 hover:text-slate-600 px-1 py-2 flex-shrink-0">Salir</button>
       </nav>
 
+      {/* Barra de pestañas inferior (solo teléfono) */}
+      <div className="sm:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-slate-200 pb-safe">
+        <div className="grid grid-cols-4">
+          {(['calendar', 'clients', 'reservations', 'billing'] as const).map(t => (
+            <button key={t} onClick={() => { setTab(t); window.scrollTo({ top: 0 }) }}
+              className={`flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] ${tab === t ? 'text-blue-600 font-semibold' : 'text-slate-400'}`}>
+              <span className="text-xl leading-none">{t === 'calendar' ? '📅' : t === 'clients' ? '👥' : t === 'reservations' ? '📋' : '💰'}</span>
+              {t === 'calendar' ? 'Calendario' : t === 'clients' ? 'Clientes' : t === 'reservations' ? 'Reservas' : 'Facturación'}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {alert && (
-        <div className={`mx-4 mt-4 p-3 rounded-xl text-sm ${alert.type === 'ok' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
-          {alert.msg} <button onClick={() => setAlert(null)} className="ml-2 opacity-50">✕</button>
+        <div className={`mx-3 sm:mx-4 mt-3 sm:mt-4 p-3 rounded-xl text-sm flex items-start gap-2 ${alert.type === 'ok' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+          <span className="flex-1 min-w-0 break-words">{alert.msg}</span> <button onClick={() => setAlert(null)} aria-label="Cerrar" className="opacity-50 px-1 flex-shrink-0">✕</button>
         </div>
       )}
 
-      <div className="p-4 max-w-6xl mx-auto">
+      <div className="p-3 sm:p-4 max-w-6xl mx-auto">
 
         {/* ── CALENDAR ── */}
         {tab === 'calendar' && (
-          <div className="bg-white rounded-2xl border border-slate-200 p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4">
             <div className="flex items-center gap-2 mb-4 flex-wrap">
-              <h2 className="font-semibold text-slate-700 mr-auto">
+              <h2 className="font-semibold text-slate-700 mr-auto w-full sm:w-auto">
                 {calView === 'week'
                   ? `${weekDays[0].toLocaleDateString('es-SV', { day: 'numeric', month: 'short' })} – ${weekDays[6].toLocaleDateString('es-SV', { day: 'numeric', month: 'short', year: 'numeric' })}`
                   : `${MONTHS_ES[monthRef.getMonth()]} ${monthRef.getFullYear()}`}
@@ -496,25 +513,67 @@ const totalConIvaMes = totalNetoMes * (1 + IVA)
                 <button onClick={() => setCalView('week')} className={`text-xs px-3 py-1.5 rounded-md transition-all ${calView === 'week' ? 'bg-white shadow-sm font-medium' : 'text-slate-500'}`}>Semana</button>
                 <button onClick={() => setCalView('month')} className={`text-xs px-3 py-1.5 rounded-md transition-all ${calView === 'month' ? 'bg-white shadow-sm font-medium' : 'text-slate-500'}`}>Mes</button>
               </div>
+              <div className="flex items-center">
               {calView === 'week' ? (
                 <>
-                  <button onClick={() => setWeekOffset(w => w - 1)} className="p-1.5 rounded-lg hover:bg-slate-100">‹</button>
-                  <button onClick={() => setWeekOffset(0)} className="text-xs px-2 py-1.5 rounded-lg hover:bg-slate-100">Hoy</button>
-                  <button onClick={() => setWeekOffset(w => w + 1)} className="p-1.5 rounded-lg hover:bg-slate-100">›</button>
+                  <button onClick={() => setWeekOffset(w => w - 1)} className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-slate-100 text-lg" aria-label="Semana anterior">‹</button>
+                  <button onClick={() => setWeekOffset(0)} className="text-xs px-2 h-9 rounded-lg hover:bg-slate-100">Hoy</button>
+                  <button onClick={() => setWeekOffset(w => w + 1)} className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-slate-100 text-lg" aria-label="Semana siguiente">›</button>
                 </>
               ) : (
                 <>
-                  <button onClick={() => setMonthOffset(m => m - 1)} className="p-1.5 rounded-lg hover:bg-slate-100">‹</button>
-                  <button onClick={() => setMonthOffset(0)} className="text-xs px-2 py-1.5 rounded-lg hover:bg-slate-100">Hoy</button>
-                  <button onClick={() => setMonthOffset(m => m + 1)} className="p-1.5 rounded-lg hover:bg-slate-100">›</button>
+                  <button onClick={() => { setMonthOffset(m => m - 1); setMobileDay(null) }} className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-slate-100 text-lg" aria-label="Mes anterior">‹</button>
+                  <button onClick={() => { setMonthOffset(0); setMobileDay(null) }} className="text-xs px-2 h-9 rounded-lg hover:bg-slate-100">Hoy</button>
+                  <button onClick={() => { setMonthOffset(m => m + 1); setMobileDay(null) }} className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-slate-100 text-lg" aria-label="Mes siguiente">›</button>
                 </>
               )}
-              <button onClick={() => setShowNewRes({})} className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700">+ Reserva</button>
+              </div>
+              <button onClick={() => setShowNewRes({})} className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 ml-auto sm:ml-0 whitespace-nowrap">+ Reserva</button>
             </div>
 
             {calView === 'week' && (
               <>
-                <div className="grid gap-1" style={{ gridTemplateColumns: '64px repeat(7, 1fr)' }}>
+                {/* Teléfono: un día por fila, los 3 turnos como columnas */}
+                <div className="sm:hidden">
+                  <div className="grid grid-cols-[44px_repeat(3,minmax(0,1fr))] gap-1 mb-1 text-[11px] text-slate-400 text-center">
+                    <div />
+                    <div>☀️ 7–12</div>
+                    <div>🌤️ 1–5</div>
+                    <div>🌙 6–9</div>
+                  </div>
+                  <div className="space-y-1">
+                    {weekDays.map(d => {
+                      const dateStr = fmtDate(d)
+                      const isDom = d.getDay() === 0
+                      const isTodayD = dateStr === todayStr
+                      return (
+                        <div key={dateStr} className="grid grid-cols-[44px_repeat(3,minmax(0,1fr))] gap-1">
+                          <div className={`flex flex-col items-center justify-center rounded-xl text-xs leading-tight ${isTodayD ? 'bg-blue-50 text-blue-600' : isDom ? 'bg-purple-50 text-purple-500' : 'text-slate-400'}`}>
+                            <span>{DAYS_ES[d.getDay()]}</span>
+                            <span className="font-semibold text-sm">{d.getDate()}</span>
+                          </div>
+                          {(['morning', 'afternoon', 'night'] as const).map(slot => {
+                            const res = getRes(dateStr, slot)
+                            const client = res ? clients.find(c => c.id === res.client_id) : null
+                            return (
+                              <button key={slot}
+                                onClick={() => res ? setEditingRes(res) : setShowNewRes({ date: dateStr, slot })}
+                                className={`h-12 min-w-0 rounded-xl border flex items-center justify-center px-1 text-center transition-all
+                                  ${res ? slotColors[slot] : isDom ? 'border-purple-100 bg-purple-50' : 'border-slate-100 bg-slate-50 active:bg-blue-50'}`}>
+                                {client
+                                  ? <span className="text-xs font-medium leading-tight line-clamp-2 break-words">{displayName(client).split(' ')[0]}</span>
+                                  : <span className={`text-lg ${isDom ? 'text-purple-200' : 'text-slate-200'}`}>+</span>}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Computadora / tablet: semana en columnas */}
+                <div className="hidden sm:grid gap-1" style={{ gridTemplateColumns: '64px repeat(7, minmax(0, 1fr))' }}>
                   <div />
                   {weekDays.map(d => {
                     const isDom = d.getDay() === 0
@@ -540,19 +599,19 @@ const totalConIvaMes = totalNetoMes * (1 + IVA)
                             onClick={() => res ? setEditingRes(res) : setShowNewRes({ date: dateStr, slot })}
                             className={`min-h-12 rounded-xl border cursor-pointer transition-all flex flex-col items-center justify-center text-center p-1
                               ${res ? slotColors[slot] : isDom ? 'border-purple-100 bg-purple-50 hover:border-purple-300' : 'border-slate-100 bg-slate-50 hover:border-blue-300 hover:bg-blue-50'}`}>
-                            {client ? <span className="text-xs font-medium leading-tight">{displayName(client).split(' ')[0]}</span> : <span className={`text-lg ${isDom ? 'text-purple-200' : 'text-slate-200'}`}>+</span>}
+                            {client ? <span className="text-xs font-medium leading-tight truncate w-full">{displayName(client).split(' ')[0]}</span> : <span className={`text-lg ${isDom ? 'text-purple-200' : 'text-slate-200'}`}>+</span>}
                           </div>
                         )
                       })}
                     </>
                   ))}
                 </div>
-                <div className="flex gap-4 mt-3 text-xs text-slate-400 flex-wrap">
+                <div className="flex gap-x-4 gap-y-1 mt-3 text-xs text-slate-400 flex-wrap">
                   <span><span className="inline-block w-3 h-3 rounded bg-blue-200 mr-1" />Mañana</span>
                   <span><span className="inline-block w-3 h-3 rounded bg-green-200 mr-1" />Tarde</span>
                   <span><span className="inline-block w-3 h-3 rounded bg-amber-200 mr-1" />Noche extra</span>
                   <span><span className="inline-block w-3 h-3 rounded bg-purple-100 mr-1" />Domingo</span>
-                  <span className="ml-auto">Clic en celda ocupada = cancelar</span>
+                  <span className="w-full sm:w-auto sm:ml-auto">Toca una casilla libre para reservar · ocupada para editar</span>
                 </div>
               </>
             )}
@@ -572,12 +631,20 @@ const totalConIvaMes = totalNetoMes * (1 + IVA)
                     const dayRes = getResForDay(dateStr)
                     const isToday = dateStr === todayStr
                     const isDom = new Date(dateStr + 'T12:00:00').getDay() === 0
+                    const isPicked = mobileDay === dateStr
                     return (
-                      <div key={dateStr} onClick={() => setShowNewRes({ date: dateStr })}
-                        className={`min-h-16 rounded-xl border p-1.5 transition-all cursor-pointer
-                          ${isToday ? 'border-blue-300 bg-blue-50' : isDom ? 'border-purple-100 bg-purple-50 hover:border-purple-300' : 'border-slate-100 hover:border-slate-300'}`}>
+                      <div key={dateStr} onClick={() => {
+                          if (window.matchMedia('(min-width: 640px)').matches) setShowNewRes({ date: dateStr })
+                          else setMobileDay(isPicked ? null : dateStr)
+                        }}
+                        className={`min-h-12 sm:min-h-16 min-w-0 rounded-xl border p-1 sm:p-1.5 transition-all cursor-pointer
+                          ${isPicked ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50' : isToday ? 'border-blue-300 bg-blue-50' : isDom ? 'border-purple-100 bg-purple-50 hover:border-purple-300' : 'border-slate-100 hover:border-slate-300'}`}>
                         <div className={`text-xs font-semibold mb-1 ${isToday ? 'text-blue-600' : isDom ? 'text-purple-500' : 'text-slate-500'}`}>{day}</div>
-                        <div className="flex flex-col gap-0.5">
+                        {/* Teléfono: puntos por turno */}
+                        <div className="sm:hidden flex flex-wrap gap-0.5">
+                          {dayRes.map(r => <span key={r.id} className={`w-2 h-2 rounded-full ${slotDots[r.slot]}`} />)}
+                        </div>
+                        <div className="hidden sm:flex flex-col gap-0.5">
                           {dayRes.map(r => {
                             const c = clients.find(x => x.id === r.client_id)
                             return (
@@ -594,12 +661,35 @@ const totalConIvaMes = totalNetoMes * (1 + IVA)
                     )
                   })}
                 </div>
-                <div className="flex gap-4 mt-3 text-xs text-slate-400 flex-wrap">
+                {/* Teléfono: detalle del día tocado */}
+                {mobileDay && (
+                  <div className="sm:hidden mt-3 rounded-xl border border-slate-200 p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-sm font-semibold text-slate-700 capitalize mr-auto">
+                        {new Date(mobileDay + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'long', day: 'numeric', month: 'long' })}
+                      </span>
+                      <button onClick={() => setShowNewRes({ date: mobileDay })} className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg">+ Reservar</button>
+                    </div>
+                    {(['morning', 'afternoon', 'night'] as const).map(slot => {
+                      const r = getRes(mobileDay, slot)
+                      const c = r ? clients.find(x => x.id === r.client_id) : null
+                      return (
+                        <button key={slot} onClick={() => r ? setEditingRes(r) : setShowNewRes({ date: mobileDay, slot })}
+                          className={`w-full flex items-center gap-2 text-left px-3 py-2.5 rounded-xl mb-1 last:mb-0 border ${r ? slotColors[slot] : 'border-slate-100 bg-slate-50'}`}>
+                          <span className="text-sm w-24 flex-shrink-0">{SLOTS[slot].emoji} {SLOTS[slot].label.replace(' extra', '')}</span>
+                          <span className={`text-sm flex-1 min-w-0 truncate ${r ? 'font-medium' : 'text-slate-300'}`}>{c ? displayName(c) : 'Libre'}</span>
+                          <span className="text-xs opacity-60 flex-shrink-0">{r ? 'Editar' : '+'}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+                <div className="flex gap-x-4 gap-y-1 mt-3 text-xs text-slate-400 flex-wrap">
                   <span><span className="inline-block w-3 h-3 rounded bg-blue-200 mr-1" />Mañana</span>
                   <span><span className="inline-block w-3 h-3 rounded bg-green-200 mr-1" />Tarde</span>
                   <span><span className="inline-block w-3 h-3 rounded bg-amber-200 mr-1" />Noche extra</span>
                   <span><span className="inline-block w-3 h-3 rounded bg-purple-100 mr-1" />Domingo</span>
-                  <span className="ml-auto">Clic en día = nueva reserva · Clic en bloque = cancelar</span>
+                  <span className="w-full sm:w-auto sm:ml-auto"><span className="sm:hidden">Toca un día para ver y agregar reservas</span><span className="hidden sm:inline">Clic en día = nueva reserva · Clic en bloque = editar</span></span>
                 </div>
               </>
             )}
@@ -608,7 +698,7 @@ const totalConIvaMes = totalNetoMes * (1 + IVA)
 
         {/* ── CLIENTS ── */}
         {tab === 'clients' && (
-          <div className="bg-white rounded-2xl border border-slate-200 p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4">
             <h2 className="font-semibold text-slate-700 mb-4">Clientes registrados</h2>
             {clients.length === 0 && <p className="text-slate-400 text-sm text-center py-8">Sin clientes.</p>}
             <div className="space-y-3">
@@ -657,18 +747,18 @@ const contractMonth = contract ? (
 
        {/* ── RESERVATIONS ── */}
         {tab === 'reservations' && (
-          <div className="bg-white rounded-2xl border border-slate-200 p-4">
-            <div className="flex items-center gap-3 mb-4 flex-wrap">
-              <h2 className="font-semibold text-slate-700 mr-auto">Todas las reservas</h2>
+          <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4">
+            <div className="grid grid-cols-2 sm:flex items-center gap-2 sm:gap-3 mb-4 sm:flex-wrap">
+              <h2 className="font-semibold text-slate-700 sm:mr-auto col-span-2">Todas las reservas</h2>
               <select value={filterYear} onChange={e => { setFilterYear(e.target.value); setFilterMonth('') }}
-                className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
+                className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white min-w-0 w-full sm:w-auto">
                 <option value="">Todos los años</option>
                 {Array.from(new Set(reservations.map(r => r.date.slice(0, 4)))).sort().map(y => (
                   <option key={y} value={y}>{y}</option>
                 ))}
               </select>
               <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)}
-                className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
+                className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white min-w-0 w-full sm:w-auto">
                 <option value="">Todos los meses</option>
                 {Array.from(new Set(reservations
   .filter(r => !filterYear || r.date.startsWith(filterYear))
@@ -678,7 +768,7 @@ const contractMonth = contract ? (
                 ))}
               </select>
               <select value={filterClient} onChange={e => setFilterClient(e.target.value)}
-                className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
+                className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white min-w-0 w-full sm:w-auto sm:max-w-[16rem] col-span-2">
                 <option value="">Todos los clientes</option>
                 {clients.map(c => <option key={c.id} value={c.id}>{displayName(c)}</option>)}
               </select>
@@ -725,7 +815,7 @@ const contractMonth = contract ? (
                 a.download = `reservas_${new Date().toISOString().slice(0,10)}.csv`
                 a.click()
                 URL.revokeObjectURL(url)
-              }} className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 flex items-center gap-1">
+              }} className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 flex items-center justify-center gap-1 whitespace-nowrap col-span-2 justify-self-end sm:justify-self-auto">
                 📊 Exportar CSV
               </button>
             </div>
@@ -746,9 +836,9 @@ const contractMonth = contract ? (
                     return (
                       <div key={r.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50">
                         <span className={`w-2 h-2 rounded-full flex-shrink-0 ${r.slot === 'morning' ? 'bg-blue-400' : r.slot === 'afternoon' ? 'bg-green-400' : 'bg-amber-400'}`} />
-                        <div className="flex-1 text-sm">
-                          <span className="font-medium">{c ? displayName(c) : '?'}</span>
-                          <span className="text-slate-400"> · {new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })} · {slot.label}</span>
+                        <div className="flex-1 min-w-0 text-sm">
+                          <span className="font-medium block sm:inline truncate">{c ? displayName(c) : '?'}</span>
+                          <span className="text-slate-400"><span className="hidden sm:inline"> · </span>{new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })} · {slot.label}</span>
                           {(() => {
   const contract = contracts.find((ct: any) => ct.client_id === r.client_id && ct.status === 'active')
   if (!contract) return null
@@ -763,10 +853,10 @@ const contractMonth = contract ? (
   }
   return null
 })()}
-                          {isDom && <span className="ml-1 text-xs text-purple-600">🗓️ dom</span>}
+                          {isDom && <span className="ml-1 text-xs text-purple-600">· dom</span>}
                           {r.slot === 'night' && !isDom && <span className="ml-2 text-xs bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">noche</span>}
                         </div>
-                        <button onClick={() => setEditingRes(r)} className="text-xs text-slate-300 hover:text-red-400">✕</button>
+                        <button onClick={() => setEditingRes(r)} aria-label="Editar reserva" className="text-xs text-slate-400 hover:text-blue-500 w-9 h-9 -mr-1 flex items-center justify-center rounded-lg flex-shrink-0">✎</button>
                       </div>
                     )
                   })}
@@ -779,21 +869,21 @@ const contractMonth = contract ? (
         {/* ── BILLING ── */}
         {tab === 'billing' && (
           <div className="space-y-4">
-            <div className="bg-white rounded-2xl border border-slate-200 p-4">
+            <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4">
               <div className="flex items-center gap-3 flex-wrap">
-                <div>
+                <div className="min-w-0">
                   <h2 className="font-semibold text-slate-700">Facturación del mes en curso</h2>
                   <p className="text-xs text-slate-400 mt-0.5">Basado en reservas activas · IVA 13%</p>
                 </div>
-               <div className="flex gap-2 flex-wrap ml-auto">
+               <div className="grid grid-cols-2 sm:flex gap-2 sm:flex-wrap w-full sm:w-auto sm:ml-auto">
                   <select value={billingClient} onChange={e => setBillingClient(e.target.value)}
-                    className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
+                    className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white min-w-0 w-full sm:w-auto sm:max-w-[16rem] col-span-2">
                     <option value="">Todos los clientes</option>
                     {clients.map(c => <option key={c.id} value={c.id}>{displayName(c)}</option>)}
                   </select>
                   <select value={billingVigency} onChange={e => setBillingVigency(e.target.value)}
-                    className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
-                    <option value="">Cualquier vigencia</option>
+                    className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white min-w-0 w-full sm:w-auto">
+                    <option value="">Toda vigencia</option>
                     <option value="active">Vigencia activa</option>
                     <option value="expired">Vigencia vencida</option>
                   </select>
@@ -847,23 +937,23 @@ const contractMonth = contract ? (
                 a.download = `facturacion_${new Date().toISOString().slice(0,10)}.csv`
                 a.click()
                 URL.revokeObjectURL(url)
-              }} className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 flex items-center gap-1">
+              }} className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 flex items-center justify-center gap-1 whitespace-nowrap">
                 📊 Exportar CSV
               </button>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-3 mt-4">
-                <div className="bg-slate-50 rounded-xl p-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 mt-4">
+                <div className="bg-slate-50 rounded-xl p-3 min-w-0">
                   <div className="text-xs text-slate-400 mb-1">Total neto</div>
-                  <div className="text-2xl font-semibold text-slate-700">{fmt$(totalNetoMes)}</div>
+                  <div className="text-lg sm:text-2xl font-semibold text-slate-700 truncate">{fmt$(totalNetoMes)}</div>
                 </div>
-                <div className="bg-slate-50 rounded-xl p-3">
+                <div className="bg-slate-50 rounded-xl p-3 min-w-0">
                   <div className="text-xs text-slate-400 mb-1">IVA (13%)</div>
-                  <div className="text-2xl font-semibold text-slate-500">{fmt$(totalIvaMes)}</div>
+                  <div className="text-lg sm:text-2xl font-semibold text-slate-500 truncate">{fmt$(totalIvaMes)}</div>
                 </div>
-                <div className="bg-blue-600 rounded-xl p-3">
-                  <div className="text-xs text-blue-200 mb-1">Total con IVA</div>
-                  <div className="text-2xl font-semibold text-white">{fmt$(totalConIvaMes)}</div>
+                <div className="bg-blue-600 rounded-xl p-3 min-w-0 col-span-2 sm:col-span-1 flex sm:block items-center justify-between">
+                  <div className="text-xs text-blue-200 sm:mb-1">Total con IVA</div>
+                  <div className="text-xl sm:text-2xl font-semibold text-white truncate">{fmt$(totalConIvaMes)}</div>
                 </div>
               </div>
             </div>
@@ -901,17 +991,17 @@ const extraRes = getExtraReservations(c).filter(r => {
 const pendingExtras = extraRes.filter(r => r.chargeStatus === 'por_cobrar').length
 
               return (
-                <div key={c.id} className="bg-white rounded-2xl border border-slate-200 p-4">
-                  <div className="flex items-center gap-3 mb-4">
+                <div key={c.id} className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4">
+                  <div className="flex flex-wrap sm:flex-nowrap items-start gap-3 mb-4">
                     <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-semibold flex-shrink-0">
                       {displayName(c).split(' ').map((x: string) => x[0]).slice(0, 2).join('')}
                     </div>
-                    <div>
-                      <div className="font-semibold text-sm">{displayName(c)}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm break-words">{displayName(c)}</div>
 {c.company_name && <div className="text-xs text-slate-400">{c.name}</div>}
 {contract && <div className="text-xs text-slate-500 font-medium">{contract.contract_number}</div>}
 {contract && (
-  <div className="flex gap-1 mt-1">
+  <div className="flex flex-wrap gap-1 mt-1.5">
     {[1,2,3].map(m => {
       const mStart = new Date(contract[`month${m}_start`] + 'T00:00:00')
       const mEnd = new Date(contract[`month${m}_end`] + 'T23:59:59')
@@ -919,7 +1009,7 @@ const pendingExtras = extraRes.filter(r => r.chargeStatus === 'por_cobrar').leng
       const isSelected = (selectedContractMonth[c.id] || currentMonth) === m
       return (
         <button key={m} onClick={() => setSelectedContractMonth(prev => ({ ...prev, [c.id]: m }))}
-          className={`text-xs px-2 py-0.5 rounded-full border transition-all ${isSelected ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-200 text-slate-500 hover:border-blue-300'}`}>
+          className={`text-xs px-2.5 py-1 rounded-full border transition-all whitespace-nowrap ${isSelected ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-200 text-slate-500 hover:border-blue-300'}`}>
           Mes {m}/3 {isCurrentM ? '●' : ''}
         </button>
       )
@@ -930,155 +1020,73 @@ const pendingExtras = extraRes.filter(r => r.chargeStatus === 'por_cobrar').leng
   {contract ? `${new Date(contract[`month${selectedContractMonth[c.id] || currentMonth}_start`] + 'T12:00:00').toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })} → ${new Date(contract[`month${selectedContractMonth[c.id] || currentMonth}_end`] + 'T12:00:00').toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}` : `Vigencia hasta ${end.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })} · ${dl}d restantes`}
 </div>
                     </div>
-                    <div className="ml-auto text-right flex flex-col items-end gap-2">
-  <button onClick={() => printClientBilling(c)} className="text-xs border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 flex items-center gap-1">
+                    <div className="w-full sm:w-auto sm:ml-auto flex sm:flex-col items-center sm:items-end justify-between gap-2 border-t border-slate-100 pt-3 sm:border-0 sm:pt-0">
+  <div className="sm:order-2 sm:text-right">
+    <div className="text-xs text-slate-400">Total con IVA</div>
+    <div className="text-xl font-semibold text-blue-600 whitespace-nowrap">{fmt$(b.totalConIva)}</div>
+  </div>
+  <button onClick={() => printClientBilling(c)} className="sm:order-1 text-xs border border-slate-200 rounded-lg px-3 py-2 sm:py-1.5 hover:bg-slate-50 flex items-center gap-1 whitespace-nowrap">
     🖨️ Imprimir / PDF
   </button>
-  <div className="text-xs text-slate-400">Total con IVA</div>
-  <div className="text-xl font-semibold text-blue-600">{fmt$(b.totalConIva)}</div>
 </div>
                   </div>
 
                   {/* Desglose */}
                   <div className="border border-slate-100 rounded-xl overflow-hidden mb-3">
-                    <div className="grid grid-cols-5 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-400 border-b border-slate-100">
-                      <span className="col-span-2">Concepto</span>
-                      <span className="text-right">Neto</span>
-                      <span className="text-right">IVA 13%</span>
-                      <span className="text-right">Total</span>
-                    </div>
+                    <BillHeader />
 
                     {/* Paquete con estado de pago */}
-                    <div className="grid grid-cols-5 px-3 py-2.5 text-sm border-b border-slate-50 items-center">
-                      <div className="col-span-2">
-                        <span className="text-slate-600">Paquete {pkg.label}</span>
-                        <span className="text-xs text-slate-400 block">{pkg.dayBlocks} día + {pkg.nightBlocks} noche/domingo</span>
-                        <button onClick={() => togglePackageStatus(c, selectedMonth)}
-                          className={`mt-1 text-xs px-2 py-0.5 rounded-full font-medium cursor-pointer transition-all ${pkgStatus === 'pagado' ? 'bg-green-50 text-green-600 hover:bg-green-100' : 'bg-amber-50 text-amber-600 hover:bg-amber-100'}`}>
-                          {pkgStatus === 'pagado' ? '✓ Pagado' : '⏳ Pendiente'} — clic para cambiar
-                        </button>
-                      </div>
-                      <span className="text-right text-slate-600">{fmt$(b.baseNeto)}</span>
-                      <span className="text-right text-slate-400">{fmt$(b.baseIva)}</span>
-                      <span className="text-right font-medium">{fmt$(b.baseNeto + b.baseIva)}</span>
-                    </div>
+                    <BillLine label={`Paquete ${pkg.label}`} sub={`${pkg.dayBlocks} día + ${pkg.nightBlocks} noche/domingo`} neto={b.baseNeto} iva={b.baseIva}>
+                      <button onClick={() => togglePackageStatus(c, selectedMonth)}
+                        className={`mt-1.5 text-xs px-2.5 py-1 rounded-full font-medium cursor-pointer transition-all ${pkgStatus === 'pagado' ? 'bg-green-50 text-green-600 hover:bg-green-100' : 'bg-amber-50 text-amber-600 hover:bg-amber-100'}`}>
+                        {pkgStatus === 'pagado' ? '✓ Pagado' : '⏳ Pendiente'} · cambiar
+                      </button>
+                    </BillLine>
 
                     {/* Noches extra con estado individual */}
                     {b.nightNeto > 0 && (
-                      <div className="border-b border-slate-50">
-                        <div className="grid grid-cols-5 px-3 py-2 text-sm items-start">
-                          <div className="col-span-2">
-                            <span className="text-slate-600">Noches extra</span>
-                            <span className="text-xs text-slate-400 block">{extraRes.filter(r => r.slot === 'night' && !isSunday(r.date)).length} × {fmt$(c.night_price)}</span>
-                          </div>
-                          <span className="text-right text-slate-600">{fmt$(b.nightNeto)}</span>
-                          <span className="text-right text-slate-400">{fmt$(b.nightIva)}</span>
-                          <span className="text-right font-medium">{fmt$(b.nightNeto + b.nightIva)}</span>
-                        </div>
-                        <div className="px-3 pb-2 space-y-1">
-                          {extraRes.filter(r => r.slot === 'night' && !isSunday(r.date)).map(r => (
-                            <div key={r.id} className="flex items-center gap-2 text-xs">
-                              <span className="text-slate-400">{new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit' })}</span>
-                              <span className="flex-1" />
-                              <select
-  value={r.chargeStatus}
-  onChange={e => markChargeStatus(r.id, e.target.value)}
-  className="text-xs border border-slate-200 rounded-lg px-2 py-0.5 bg-white cursor-pointer">
-  <option value="programado">🔒 Programado</option>
-  <option value="por_cobrar">⏳ Por cobrar</option>
-  <option value="cobrado">✓ Cobrado</option>
-</select>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                      <BillLine label="Noches extra" sub={`${extraRes.filter(r => r.slot === 'night' && !isSunday(r.date)).length} × ${fmt$(c.night_price)}`} neto={b.nightNeto} iva={b.nightIva}
+                        details={extraRes.filter(r => r.slot === 'night' && !isSunday(r.date)).map(r => (
+                          <ChargeRow key={r.id} date={r.date} value={r.chargeStatus} onChange={v => markChargeStatus(r.id, v)} />
+                        ))} />
                     )}
 
                     {/* Domingos con estado individual */}
                     {b.sundayNeto > 0 && (
-                      <div className="border-b border-slate-50">
-                        <div className="grid grid-cols-5 px-3 py-2 text-sm items-start">
-                          <div className="col-span-2">
-                            <span className="text-slate-600">Domingos</span>
-                            <span className="text-xs text-slate-400 block">{extraRes.filter(r => isSunday(r.date)).length} × {fmt$(c.sunday_price || 25)}</span>
-                          </div>
-                          <span className="text-right text-slate-600">{fmt$(b.sundayNeto)}</span>
-                          <span className="text-right text-slate-400">{fmt$(b.sundayIva)}</span>
-                          <span className="text-right font-medium">{fmt$(b.sundayNeto + b.sundayIva)}</span>
-                        </div>
-                        <div className="px-3 pb-2 space-y-1">
-                          {extraRes.filter(r => isSunday(r.date)).map(r => (
-                            <div key={r.id} className="flex items-center gap-2 text-xs">
-                              <span className="text-slate-400">{new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit' })}</span>
-                              <span className="flex-1" />
-                              <select
-  value={r.chargeStatus}
-  onChange={e => markChargeStatus(r.id, e.target.value)}
-  className="text-xs border border-slate-200 rounded-lg px-2 py-0.5 bg-white cursor-pointer">
-  <option value="programado">🔒 Programado</option>
-  <option value="por_cobrar">⏳ Por cobrar</option>
-  <option value="cobrado">✓ Cobrado</option>
-</select>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                      <BillLine label="Domingos" sub={`${extraRes.filter(r => isSunday(r.date)).length} × ${fmt$(c.sunday_price || 25)}`} neto={b.sundayNeto} iva={b.sundayIva}
+                        details={extraRes.filter(r => isSunday(r.date)).map(r => (
+                          <ChargeRow key={r.id} date={r.date} value={r.chargeStatus} onChange={v => markChargeStatus(r.id, v)} />
+                        ))} />
                     )}
-{/* Bloques extra */}
-{b.extraBlocks > 0 && (
-  <div className="border-b border-slate-50">
-    <div className="grid grid-cols-5 px-3 py-2 text-sm items-start">
-      <div className="col-span-2">
-        <span className="text-slate-600">Bloques extra</span>
-        <span className="text-xs text-slate-400 block">{b.extraBlocks} × {fmt$(b.extraBlockPrice)}</span>
-      </div>
-      <span className="text-right text-slate-600">{fmt$(b.extraBlockNeto)}</span>
-      <span className="text-right text-slate-400">{fmt$(b.extraBlockIva)}</span>
-      <span className="text-right font-medium">{fmt$(b.extraBlockNeto + b.extraBlockIva)}</span>
-    </div>
-    <div className="px-3 pb-2 space-y-1">
-      {billingReservations(c.id).filter(r => {
-        if (!countsAgainstQuota(r.date, r.slot)) return false
-        if (!contract) return true
-        const rd = new Date(quotaDate(r) + 'T12:00:00')
-        const mStart = new Date(contract[`month${selectedMonth}_start`] + 'T00:00:00')
-        const mEnd = new Date(contract[`month${selectedMonth}_end`] + 'T23:59:59')
-        return rd >= mStart && rd <= mEnd
-      }).slice(PACKAGES[c.package].dayBlocks).map(r => (
-        <div key={r.id} className="flex items-center gap-2 text-xs">
-          <span className="text-slate-400">{new Date(r.date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit' })}</span>
-          <span className="flex-1" />
-          <select
-            value={(r as any).charge_status || 'programado'}
-            onChange={e => markChargeStatus(r.id, e.target.value)}
-            className="text-xs border border-slate-200 rounded-lg px-2 py-0.5 bg-white cursor-pointer">
-            <option value="programado">🔒 Programado</option>
-            <option value="por_cobrar">⏳ Por cobrar</option>
-            <option value="cobrado">✓ Cobrado</option>
-          </select>
-        </div>
-      ))}
-    </div>
-  </div>
-)}
+
+                    {/* Bloques extra */}
+                    {b.extraBlocks > 0 && (
+                      <BillLine label="Bloques extra" sub={`${b.extraBlocks} × ${fmt$(b.extraBlockPrice)}`} neto={b.extraBlockNeto} iva={b.extraBlockIva}
+                        details={billingReservations(c.id).filter(r => {
+                          if (!countsAgainstQuota(r.date, r.slot)) return false
+                          if (!contract) return true
+                          const rd = new Date(quotaDate(r) + 'T12:00:00')
+                          const mStart = new Date(contract[`month${selectedMonth}_start`] + 'T00:00:00')
+                          const mEnd = new Date(contract[`month${selectedMonth}_end`] + 'T23:59:59')
+                          return rd >= mStart && rd <= mEnd
+                        }).slice(PACKAGES[c.package].dayBlocks).map(r => (
+                          <ChargeRow key={r.id} date={r.date} value={(r as any).charge_status || 'programado'} onChange={v => markChargeStatus(r.id, v)} />
+                        ))} />
+                    )}
+
                     {/* Botón marcar todos */}
                     {pendingExtras > 0 && (
-                      <div className="px-3 py-2 bg-orange-50 border-b border-slate-50 flex items-center justify-between">
+                      <div className="px-3 py-2 bg-orange-50 border-b border-slate-50 flex flex-wrap items-center justify-between gap-2">
                         <span className="text-xs text-orange-600">{pendingExtras} extra{pendingExtras > 1 ? 's' : ''} por cobrar</span>
                         <button onClick={() => markAllExtras(c, 'cobrado')}
-                          className="text-xs bg-orange-500 text-white px-3 py-1 rounded-lg hover:bg-orange-600 transition-colors">
+                          className="text-xs bg-orange-500 text-white px-3 py-1.5 rounded-lg hover:bg-orange-600 transition-colors">
                           Marcar todos como cobrados
                         </button>
                       </div>
                     )}
 
                     {/* Total */}
-                    <div className="grid grid-cols-5 px-3 py-2.5 text-sm bg-slate-50 font-semibold">
-                      <span className="col-span-2 text-slate-700">Total</span>
-                      <span className="text-right text-slate-700">{fmt$(b.totalNeto)}</span>
-                      <span className="text-right text-slate-500">{fmt$(b.totalIva)}</span>
-                      <span className="text-right text-blue-600">{fmt$(b.totalConIva)}</span>
-                    </div>
+                    <BillLine total label="Total" neto={b.totalNeto} iva={b.totalIva} />
                   </div>
 
                   {/* Depósito */}
@@ -1090,14 +1098,14 @@ const pendingExtras = extraRes.filter(r => r.chargeStatus === 'por_cobrar').leng
                       'border-amber-100 bg-amber-50'
                     }`}>
                       <span className="text-lg">🔒</span>
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <span className="font-medium">Depósito de garantía</span>
                         <span className="text-xs text-slate-500 block">
                           {c.deposit_date ? `Registrado el ${new Date(c.deposit_date + 'T12:00:00').toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}` : 'Sin fecha registrada'}
                         </span>
                       </div>
-                      <div className="text-right">
-                        <div className="font-semibold">{fmt$(c.deposit_amount)}</div>
+                      <div className="text-right flex-shrink-0">
+                        <div className="font-semibold whitespace-nowrap">{fmt$(c.deposit_amount)}</div>
                         <span className={`text-xs font-medium ${depStatus.color} px-2 py-0.5 rounded-full`}>{depStatus.label}</span>
                       </div>
                     </div>
@@ -1161,45 +1169,59 @@ const pendingExtras = extraRes.filter(r => r.chargeStatus === 'por_cobrar').leng
     </div>
   )
 }
+function ChargeRow({ date, value, onChange }: { date: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="text-slate-400 min-w-0 truncate">{new Date(date + 'T12:00:00').toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: '2-digit' })}</span>
+      <span className="flex-1" />
+      <select value={value} onChange={e => onChange(e.target.value)}
+        className="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white cursor-pointer flex-shrink-0">
+        <option value="programado">🔒 Programado</option>
+        <option value="por_cobrar">⏳ Por cobrar</option>
+        <option value="cobrado">✓ Cobrado</option>
+      </select>
+    </div>
+  )
+}
 function ClientRow({ c, contract, contractMonth, used, total, remaining, nights, sundays, dl, end, pkg, depStatus, reservations, contracts, onEdit, onDelete }: any) {
   const [expanded, setExpanded] = useState(false)
   const pct = Math.round((used / total) * 100)
 
   return (
     <div className="rounded-xl border border-slate-100 hover:border-slate-200">
-      <div className="flex items-center gap-3 p-3">
+      <div className="flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-2 p-3">
         <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-semibold flex-shrink-0">
           {displayName(c).split(' ').map((x: string) => x[0]).slice(0, 2).join('')}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium text-sm">{displayName(c)}</span>
+            <span className="font-medium text-sm break-words min-w-0">{displayName(c)}</span>
             {c.company_name && <span className="text-xs text-slate-400">({c.name})</span>}
             <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">{pkg.label}</span>
             {contract && <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">{contract.contract_number}</span>}
             {contractMonth && <span className="text-xs bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full">Mes {contractMonth}/3</span>}
             {dl <= 5 && <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">⚠️ {dl}d</span>}
           </div>
-          <div className="text-xs text-slate-400 mt-0.5">
-            Vence {end.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-            {c.deposit_amount > 0 && <span className={`ml-2 px-1.5 py-0.5 rounded text-xs font-medium ${depStatus.color}`}>Depósito {fmt$(c.deposit_amount)} · {depStatus.label}</span>}
+          <div className="text-xs text-slate-400 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span>Vence {end.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
+            {c.deposit_amount > 0 && <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${depStatus.color}`}>Depósito {fmt$(c.deposit_amount)} · {depStatus.label}</span>}
           </div>
           <div className="mt-1.5 h-1.5 bg-slate-100 rounded-full overflow-hidden">
             <div className={`h-full rounded-full ${pct >= 100 ? 'bg-red-400' : pct >= 75 ? 'bg-amber-400' : 'bg-blue-400'}`} style={{ width: `${Math.min(pct, 100)}%` }} />
           </div>
         </div>
-        <div className="flex flex-col items-end gap-1 flex-shrink-0">
-          <span className={`text-xs font-semibold px-2 py-1 rounded-lg ${remaining === 0 ? 'bg-red-50 text-red-600' : remaining <= 1 ? 'bg-amber-50 text-amber-600' : 'bg-green-50 text-green-600'}`}>
+        <div className="w-full sm:w-auto flex sm:flex-col items-center sm:items-end justify-between gap-1 flex-shrink-0 pl-[52px] sm:pl-0">
+          <span className={`text-xs font-semibold px-2 py-1 rounded-lg whitespace-nowrap ${remaining === 0 ? 'bg-red-50 text-red-600' : remaining <= 1 ? 'bg-amber-50 text-amber-600' : 'bg-green-50 text-green-600'}`}>
             {remaining} disp.
           </span>
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-1 sm:gap-2 items-center">
             {contract && (
-              <button onClick={() => setExpanded(e => !e)} className="text-xs text-purple-400 hover:text-purple-600">
+              <button onClick={() => setExpanded(e => !e)} className="text-xs text-purple-500 hover:text-purple-600 px-1.5 py-1.5">
                 {expanded ? 'ocultar' : 'ver meses'}
               </button>
             )}
-            <button onClick={onEdit} className="text-xs text-blue-400 hover:text-blue-600">editar</button>
-            <button onClick={onDelete} className="text-xs text-slate-300 hover:text-red-400">eliminar</button>
+            <button onClick={onEdit} className="text-xs text-blue-500 hover:text-blue-600 px-1.5 py-1.5">editar</button>
+            <button onClick={onDelete} className="text-xs text-slate-400 hover:text-red-400 px-1.5 py-1.5">eliminar</button>
           </div>
         </div>
       </div>
@@ -1230,14 +1252,14 @@ function ClientRow({ c, contract, contractMonth, used, total, remaining, nights,
             const monthPct = Math.round((Math.min(monthUsed, total) / total) * 100)
             return (
               <div key={m} className={`rounded-xl p-3 ${isCurrentM ? 'bg-blue-50 border border-blue-100' : 'bg-slate-50 border border-slate-100'}`}>
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
                   <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${isCurrentM ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'}`}>Mes {m}/3</span>
                   {isCurrentM && <span className="text-xs text-blue-500">● Mes actual</span>}
                   <span className="text-xs text-slate-400 ml-auto">
                     {new Date(contract[`month${m}_start`] + 'T12:00:00').toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })} → {new Date(contract[`month${m}_end`] + 'T12:00:00').toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                   </span>
                 </div>
-                <div className="flex gap-4 text-xs text-slate-500 flex-wrap">
+                <div className="flex gap-x-3 gap-y-1 text-xs text-slate-500 flex-wrap">
                   <span>{Math.min(monthUsed, total)}/{total} bloques</span>
                   {monthNights > 0 && <span>· {monthNights} noches</span>}
                   {monthSundays > 0 && <span>· {monthSundays} domingos</span>}
@@ -1288,14 +1310,14 @@ function NewClientModal({ onClose, onSave }: { onClose: () => void; onSave: (d: 
       <label className="text-xs text-slate-500">Correo electrónico</label>
       <input type="email" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3 mt-1" value={form.contact} onChange={e => set('contact', e.target.value)} placeholder="correo@ejemplo.com" />
       <label className="text-xs text-slate-500">Contraseña de acceso al portal</label>
-      <div className="flex gap-2 mt-1 mb-1">
-        <input type="text" className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono" value={form.password} onChange={e => set('password', e.target.value)} placeholder="Escribe o genera una" />
-        <button onClick={generatePassword} className="px-3 py-2 text-xs border border-slate-200 rounded-lg hover:bg-slate-50">Generar</button>
-        {form.password && <button onClick={copyPassword} className={`px-3 py-2 text-xs rounded-lg border ${copied ? 'bg-green-50 text-green-600 border-green-200' : 'border-slate-200 hover:bg-slate-50'}`}>{copied ? '✓ Copiado' : 'Copiar'}</button>}
+      <div className="flex flex-wrap gap-2 mt-1 mb-1">
+        <input type="text" className="flex-1 min-w-0 basis-full sm:basis-0 border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono" value={form.password} onChange={e => set('password', e.target.value)} placeholder="Escribe o genera una" />
+        <button onClick={generatePassword} className="flex-1 sm:flex-none px-3 py-2 text-xs border border-slate-200 rounded-lg hover:bg-slate-50">Generar</button>
+        {form.password && <button onClick={copyPassword} className={`flex-1 sm:flex-none px-3 py-2 text-xs rounded-lg border ${copied ? 'bg-green-50 text-green-600 border-green-200' : 'border-slate-200 hover:bg-slate-50'}`}>{copied ? '✓ Copiado' : 'Copiar'}</button>}
       </div>
       <p className="text-xs text-slate-400 mb-3">Comparte este correo y contraseña con el cliente.</p>
-      <div className="grid grid-cols-2 gap-3 mb-3">
-  <div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+  <div className="min-w-0">
     <label className="text-xs text-slate-500">Paquete</label>
     <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" value={form.package} onChange={e => set('package', e.target.value)}>
       <option value="elite">👑 Élite — 15 día + 7 noche/domingo</option>
@@ -1309,17 +1331,18 @@ function NewClientModal({ onClose, onSave }: { onClose: () => void; onSave: (d: 
     <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.start_date} onChange={e => set('start_date', e.target.value)} />
   </div>
 </div>
-      <div className="grid grid-cols-3 gap-3 mb-3">
-  <div>
-    <label className="text-xs text-slate-500">Precio noche extra ($)</label>
+      <p className="text-xs text-slate-500 mb-1">Precios de turnos extra</p>
+      <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-3">
+  <div className="min-w-0">
+    <label className="text-xs text-slate-400">Noche ($)</label>
     <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.night_price} onChange={e => set('night_price', parseFloat(e.target.value))} />
   </div>
   <div>
-    <label className="text-xs text-slate-500">Precio domingo ($)</label>
+    <label className="text-xs text-slate-400">Domingo ($)</label>
     <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.sunday_price} onChange={e => set('sunday_price', parseFloat(e.target.value))} />
   </div>
   <div>
-    <label className="text-xs text-slate-500">Bloque extra ($)</label>
+    <label className="text-xs text-slate-400">Bloque ($)</label>
     <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.extra_block_price} onChange={e => set('extra_block_price', parseFloat(e.target.value))} />
   </div>
 </div>
@@ -1327,7 +1350,7 @@ function NewClientModal({ onClose, onSave }: { onClose: () => void; onSave: (d: 
         <p className="text-xs font-medium text-slate-600 mb-2">🔒 Depósito de garantía</p>
         <p className="text-xs text-slate-400 mb-3">50% del paquete sugerido: <strong>{fmt$(suggestedDeposit)}</strong></p>
         <div className="grid grid-cols-2 gap-3 mb-2">
-          <div>
+          <div className="min-w-0">
             <label className="text-xs text-slate-500">Monto ($)</label>
             <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" value={form.deposit_amount} onChange={e => set('deposit_amount', parseFloat(e.target.value))} />
           </div>
@@ -1347,8 +1370,8 @@ function NewClientModal({ onClose, onSave }: { onClose: () => void; onSave: (d: 
         </div>
       </div>
       <div className="flex gap-2 justify-end">
-        <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg hover:bg-slate-100">Cancelar</button>
-        <button onClick={() => onSave(form)} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Registrar</button>
+        <button onClick={onClose} className="flex-1 sm:flex-none px-4 py-2.5 sm:py-2 text-sm rounded-lg border border-slate-200 sm:border-0 hover:bg-slate-100">Cancelar</button>
+        <button onClick={() => onSave(form)} className="flex-1 sm:flex-none px-4 py-2.5 sm:py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Registrar</button>
       </div>
     </Modal>
   )
@@ -1385,8 +1408,8 @@ function EditClientModal({ client, onClose, onSave }: { client: Client; onClose:
       <label className="text-xs text-slate-500">Correo electrónico</label>
       <input type="email" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3 mt-1" value={form.contact} onChange={e => set('contact', e.target.value)} />
       <label className="text-xs text-slate-500">Nueva contraseña <span className="text-slate-300">(dejar vacío para no cambiar)</span></label>
-      <div className="flex gap-2 mt-1 mb-1">
-        <div className="relative flex-1">
+      <div className="flex flex-wrap gap-2 mt-1 mb-1">
+        <div className="relative flex-1 min-w-0 basis-full sm:basis-0">
           <input type={showPwd ? 'text' : 'password'} className="w-full border border-slate-200 rounded-lg px-3 py-2 pr-8 text-sm font-mono" value={form.password} onChange={e => set('password', e.target.value)} placeholder="••••••••" />
           <button type="button" onClick={() => setShowPwd(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
             {showPwd ? (
@@ -1400,12 +1423,12 @@ function EditClientModal({ client, onClose, onSave }: { client: Client; onClose:
             )}
           </button>
         </div>
-        <button onClick={generatePassword} className="px-3 py-2 text-xs border border-slate-200 rounded-lg hover:bg-slate-50">Generar</button>
-        {form.password && <button onClick={copyPassword} className={`px-3 py-2 text-xs rounded-lg border ${copied ? 'bg-green-50 text-green-600 border-green-200' : 'border-slate-200 hover:bg-slate-50'}`}>{copied ? '✓ Copiado' : 'Copiar'}</button>}
+        <button onClick={generatePassword} className="flex-1 sm:flex-none px-3 py-2 text-xs border border-slate-200 rounded-lg hover:bg-slate-50">Generar</button>
+        {form.password && <button onClick={copyPassword} className={`flex-1 sm:flex-none px-3 py-2 text-xs rounded-lg border ${copied ? 'bg-green-50 text-green-600 border-green-200' : 'border-slate-200 hover:bg-slate-50'}`}>{copied ? '✓ Copiado' : 'Copiar'}</button>}
       </div>
       <p className="text-xs text-slate-400 mb-3">Si generas una nueva contraseña, compártela con el cliente.</p>
-      <div className="grid grid-cols-2 gap-3 mb-3">
-  <div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+  <div className="min-w-0">
     <label className="text-xs text-slate-500">Paquete</label>
     <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" value={form.package} onChange={e => { set('package', e.target.value); set('deposit_amount', PACKAGES[e.target.value as keyof typeof PACKAGES].price * 0.5) }}>
       <option value="elite">👑 Élite — 15 día + 7 noche/domingo</option>
@@ -1419,24 +1442,25 @@ function EditClientModal({ client, onClose, onSave }: { client: Client; onClose:
     <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.start_date} onChange={e => set('start_date', e.target.value)} />
   </div>
 </div>
-      <div className="grid grid-cols-3 gap-3 mb-3">
-  <div>
-    <label className="text-xs text-slate-500">Precio noche extra ($)</label>
+      <p className="text-xs text-slate-500 mb-1">Precios de turnos extra</p>
+      <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-3">
+  <div className="min-w-0">
+    <label className="text-xs text-slate-400">Noche ($)</label>
     <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.night_price} onChange={e => set('night_price', parseFloat(e.target.value))} />
   </div>
   <div>
-    <label className="text-xs text-slate-500">Precio domingo ($)</label>
+    <label className="text-xs text-slate-400">Domingo ($)</label>
     <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.sunday_price} onChange={e => set('sunday_price', parseFloat(e.target.value))} />
   </div>
   <div>
-    <label className="text-xs text-slate-500">Bloque extra ($)</label>
+    <label className="text-xs text-slate-400">Bloque ($)</label>
     <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={form.extra_block_price} onChange={e => set('extra_block_price', parseFloat(e.target.value))} />
   </div>
 </div>
       <div className="border border-slate-100 rounded-xl p-3 mb-4 bg-slate-50">
         <p className="text-xs font-medium text-slate-600 mb-3">🔒 Depósito de garantía</p>
         <div className="grid grid-cols-2 gap-3 mb-2">
-          <div>
+          <div className="min-w-0">
             <label className="text-xs text-slate-500">Monto ($)</label>
             <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1 bg-white" value={form.deposit_amount} onChange={e => set('deposit_amount', parseFloat(e.target.value))} />
           </div>
@@ -1456,8 +1480,8 @@ function EditClientModal({ client, onClose, onSave }: { client: Client; onClose:
         </div>
       </div>
       <div className="flex gap-2 justify-end">
-        <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg hover:bg-slate-100">Cancelar</button>
-        <button onClick={() => onSave(form)} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Guardar cambios</button>
+        <button onClick={onClose} className="flex-1 sm:flex-none px-4 py-2.5 sm:py-2 text-sm rounded-lg border border-slate-200 sm:border-0 hover:bg-slate-100">Cancelar</button>
+        <button onClick={() => onSave(form)} className="flex-1 sm:flex-none px-4 py-2.5 sm:py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Guardar cambios</button>
       </div>
     </Modal>
   )
@@ -1530,8 +1554,8 @@ function NewReservationModal({ clients, reservations, contracts, defaultDate, de
         value={form.client_id} onChange={e => set('client_id', e.target.value)}>
         {clients.map(c => <option key={c.id} value={c.id}>{displayName(c)}</option>)}
       </select>
-      <div className="grid grid-cols-2 gap-3 mb-3">
-        <div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+        <div className="min-w-0">
           <label className="text-xs text-slate-500">Fecha</label>
           <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1"
             value={form.date} onChange={e => set('date', e.target.value)} />
@@ -1577,10 +1601,10 @@ function NewReservationModal({ clients, reservations, contracts, defaultDate, de
         </div>
       )}
       <div className="flex gap-2 justify-end mt-2">
-        <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg hover:bg-slate-100">Cancelar</button>
+        <button onClick={onClose} className="flex-1 sm:flex-none px-4 py-2.5 sm:py-2 text-sm rounded-lg border border-slate-200 sm:border-0 hover:bg-slate-100">Cancelar</button>
         <button
           onClick={() => onSave({ ...form, is_extra: isExtraBlock && !willAdvance, use_next_month: willAdvance, is_admin_booking: true })}
-          className={`px-4 py-2 text-sm text-white rounded-lg ${willAdvance ? 'bg-purple-600 hover:bg-purple-700' : isExtraBlock ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}>
+          className={`flex-[2] sm:flex-none px-4 py-2.5 sm:py-2 text-sm text-white rounded-lg ${willAdvance ? 'bg-purple-600 hover:bg-purple-700' : isExtraBlock ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}>
           {willAdvance ? `⏩ Confirmar (Mes ${advanceInfo!.nextMonth}/3)` : isExtraBlock ? '⚠️ Confirmar bloque extra' : 'Confirmar'}
         </button>
       </div>
@@ -1603,8 +1627,8 @@ function EditReservationModal({ reservation, clients, onClose, onSave, onDelete 
       <div className="text-sm text-slate-500 mb-4">
         Cliente: <span className="font-medium text-slate-700">{client ? displayName(client) : '?'}</span>
       </div>
-      <div className="grid grid-cols-2 gap-3 mb-5">
-        <div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+        <div className="min-w-0">
           <label className="text-xs text-slate-500">Fecha</label>
           <input type="date" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" value={date} onChange={e => setDate(e.target.value)} />
           {date && <div className="text-xs text-slate-400 mt-1">
@@ -1621,12 +1645,12 @@ function EditReservationModal({ reservation, clients, onClose, onSave, onDelete 
         </div>
       </div>
       <div className="flex gap-2 justify-between">
-        <button onClick={onDelete} className="px-4 py-2 text-sm text-red-500 border border-red-200 rounded-lg hover:bg-red-50">
+        <button onClick={onDelete} className="px-4 py-2.5 sm:py-2 text-sm text-red-500 border border-red-200 rounded-lg hover:bg-red-50">
           Eliminar
         </button>
         <div className="flex gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg hover:bg-slate-100">Cancelar</button>
-          <button onClick={() => onSave(date, slot)} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Guardar</button>
+          <button onClick={onClose} className="px-3 sm:px-4 py-2.5 sm:py-2 text-sm rounded-lg hover:bg-slate-100">Cancelar</button>
+          <button onClick={() => onSave(date, slot)} className="px-4 py-2.5 sm:py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Guardar</button>
         </div>
       </div>
     </Modal>
@@ -1634,11 +1658,11 @@ function EditReservationModal({ reservation, clients, onClose, onSave, onDelete 
 }
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="bg-white rounded-2xl p-5 w-full max-w-md border border-slate-200 max-h-screen overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-slate-800">{title}</h3>
-          <button onClick={onClose} className="text-slate-300 hover:text-slate-500 text-xl">✕</button>
+    <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-5 w-full sm:max-w-md border border-slate-200 max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto overscroll-contain">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <h3 className="font-semibold text-slate-800 min-w-0 truncate">{title}</h3>
+          <button onClick={onClose} aria-label="Cerrar" className="text-slate-300 hover:text-slate-500 text-xl w-9 h-9 -mr-2 flex items-center justify-center flex-shrink-0">✕</button>
         </div>
         {children}
       </div>
