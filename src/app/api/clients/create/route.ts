@@ -22,18 +22,17 @@ function calcContractMonths(start_date: string) {
 }
 
 async function generateContractNumber(): Promise<string> {
+  // Se toma el número más alto de todos los contratos (no el último creado),
+  // porque las renovaciones reutilizan el número original: C001-JO-R1
   const { data } = await supabaseAdmin
     .from('contracts')
     .select('contract_number')
-    .order('created_at', { ascending: false })
-    .limit(1)
-  let nextNum = 1
-  if (data && data.length > 0) {
-    const last = data[0].contract_number
-    const match = last.match(/C(\d+)/)
-    if (match) nextNum = parseInt(match[1]) + 1
+  let maxNum = 0
+  for (const row of data || []) {
+    const match = String(row.contract_number || '').match(/^C(\d+)/)
+    if (match) maxNum = Math.max(maxNum, parseInt(match[1]))
   }
-  return `C${String(nextNum).padStart(3, '0')}`
+  return `C${String(maxNum + 1).padStart(3, '0')}`
 }
 
 export async function POST(req: NextRequest) {

@@ -100,3 +100,37 @@ export function displayName(client: Client): string {
 export function fmt$(n: number): string {
   return `$${n.toFixed(2)}`
 }
+
+// ── Renovaciones de contrato ──
+// Días antes del fin del contrato en que se habilita la renovación
+export const RENEWAL_WINDOW_DAYS = 20
+
+// Fecha local de hoy (YYYY-MM-DD), sin desfase UTC
+export function todayLocalStr(): string {
+  const n = new Date()
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
+}
+
+// Días que faltan desde hoy hasta una fecha (0 = es hoy, negativo = ya pasó)
+export function daysUntil(dateStr: string, today: string = todayLocalStr()): number {
+  const a = new Date(today + 'T12:00:00').getTime()
+  const b = new Date(dateStr + 'T12:00:00').getTime()
+  return Math.round((b - a) / 86400000)
+}
+
+// Número de la renovación: C001-JO → C001-JO-R1 → C001-JO-R2
+export function renewalContractNumber(prev: string): string {
+  const m = String(prev || '').match(/^(.*)-R(\d+)$/)
+  return m ? `${m[1]}-R${parseInt(m[2]) + 1}` : `${prev}-R1`
+}
+
+export function fmtShort(dateStr: string): string {
+  return new Date(dateStr + 'T12:00:00').toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+export const CONTRACT_STATUS: Record<string, { label: string; color: string }> = {
+  active:    { label: 'Vigente',    color: 'bg-blue-50 text-blue-600' },
+  upcoming:  { label: 'Próximo',    color: 'bg-green-50 text-green-600' },
+  finished:  { label: 'Finalizado', color: 'bg-slate-100 text-slate-500' },
+  cancelled: { label: 'Anulado',    color: 'bg-red-50 text-red-500' },
+}

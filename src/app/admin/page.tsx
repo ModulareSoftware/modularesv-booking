@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase, Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getVigencyEnd, ADMIN_EMAIL, isSunday, countsAgainstQuota, displayName, fmt$, DEPOSIT_STATUS, DepositStatus, quotaDate } from '@/lib/supabase'
+import { supabase, Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getVigencyEnd, ADMIN_EMAIL, isSunday, countsAgainstQuota, displayName, fmt$, DEPOSIT_STATUS, DepositStatus, quotaDate, RENEWAL_WINDOW_DAYS, daysUntil, fmtShort, CONTRACT_STATUS, renewalContractNumber, Package } from '@/lib/supabase'
 import { BillHeader, BillLine } from '@/components/BillLine'
 
 const ADMIN_SECRET = 'Modular2024!'
@@ -45,6 +45,7 @@ const [filterMonth, setFilterMonth] = useState('')
 const [selectedContractMonth, setSelectedContractMonth] = useState<Record<string, number>>({})
   const [alert, setAlert] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null)
 const [contracts, setContracts] = useState<any[]>([])
+  const [renewing, setRenewing] = useState<{ client: Client; contract: any } | null>(null)
   const [mobileDay, setMobileDay] = useState<string | null>(null)
 
   useEffect(() => {
@@ -258,6 +259,40 @@ async function editReservation(id: string, date: string, slot: string) {
   })
   loadData()
 }
+
+  // ── Renovaciones ──
+  async function renewContract(prev: any, pkg: string, start_date: string) {
+    const res = await fetch('/api/contracts', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ action: 'renew', previous_contract_id: prev.id, package: pkg, start_date }),
+    })
+    const json = await res.json()
+    if (!res.ok) { setAlert({ type: 'err', msg: json.error }); return false }
+    setAlert({ type: 'ok', msg: `✅ Renovación registrada: ${json.contract_number} desde el ${fmtShort(json.month1_start)}.` })
+    await loadData()
+    return true
+  }
+
+  async function finishContract(ct: any) {
+    if (!confirm(`¿Finalizar el contrato ${ct.contract_number}? Pasará al historial y el cliente ya no podrá reservar después de su fecha de fin. Recuerda actualizar el estado del depósito en "editar".`)) return
+    const res = await fetch('/api/contracts', { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ id: ct.id, status: 'finished' }) })
+    const json = await res.json()
+    if (!res.ok) { setAlert({ type: 'err', msg: json.error }); return }
+    setAlert({ type: 'ok', msg: `Contrato ${ct.contract_number} finalizado.` })
+    loadData()
+  }
+
+  async function cancelRenewal(ct: any) {
+    const resCount = reservations.filter(r => r.client_id === ct.client_id && r.date >= ct.month1_start && r.date <= ct.month3_end).length
+    const warn = resCount > 0 ? `\n\nOjo: el cliente ya tiene ${resCount} reserva${resCount > 1 ? 's' : ''} en ese periodo. Quedarán registradas, pero fuera de contrato.` : ''
+    if (!confirm(`¿Anular la renovación ${ct.contract_number}?${warn}`)) return
+    const res = await fetch('/api/contracts', { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ id: ct.id, status: 'cancelled' }) })
+    const json = await res.json()
+    if (!res.ok) { setAlert({ type: 'err', msg: json.error }); return }
+    setAlert({ type: 'ok', msg: `Renovación ${ct.contract_number} anulada.` })
+    loadData()
+  }
 
   async function deleteClient(id: string) {
     if (!confirm('¿Eliminar cliente y todas sus reservas?')) return
@@ -736,6 +771,9 @@ const contractMonth = contract ? (
                   depStatus={depStatus}
                   reservations={reservations}
                   contracts={contracts}
+                  onRenew={() => contract && setRenewing({ client: c, contract })}
+                  onFinish={() => contract && finishContract(contract)}
+                  onCancelRenewal={(ct: any) => cancelRenewal(ct)}
                   onEdit={() => setEditingClient(c)}
                   onDelete={() => deleteClient(c.id)}
                 />
@@ -1125,6 +1163,9 @@ const pendingExtras = extraRes.filter(r => r.chargeStatus === 'por_cobrar').leng
         setShowNewClient(false); loadData()
       }} />}
 
+      {renewing && <RenewContractModal client={renewing.client} contract={renewing.contract}
+        onClose={() => setRenewing(null)}
+        onSave={async (pkg, start) => { if (await renewContract(renewing.contract, pkg, start)) setRenewing(null) }} />}
       {editingClient && <EditClientModal client={editingClient} onClose={() => setEditingClient(null)} onSave={async (data) => {
         const res = await fetch('/api/clients/create', { method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ id: editingClient.id, ...data }) })
         const json = await res.json()
@@ -1183,9 +1224,20 @@ function ChargeRow({ date, value, onChange }: { date: string; value: string; onC
     </div>
   )
 }
-function ClientRow({ c, contract, contractMonth, used, total, remaining, nights, sundays, dl, end, pkg, depStatus, reservations, contracts, onEdit, onDelete }: any) {
+function ClientRow({ c, contract, contractMonth, used, total, remaining, nights, sundays, dl, end, pkg, depStatus, reservations, contracts, onRenew, onFinish, onCancelRenewal, onEdit, onDelete }: any) {
   const [expanded, setExpanded] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
   const pct = Math.round((used / total) * 100)
+
+  // Estado de renovación del contrato vigente
+  const clientContracts = (contracts || [])
+    .filter((ct: any) => ct.client_id === c.id)
+    .sort((a: any, b: any) => b.month1_start.localeCompare(a.month1_start))
+  const renewal = contract ? clientContracts.find((ct: any) => ct.previous_contract_id === contract.id && ct.status !== 'cancelled') : null
+  const daysToEnd = contract ? daysUntil(contract.month3_end) : null
+  const isExpired = !!contract && !renewal && daysToEnd !== null && daysToEnd < 0
+  const isExpiring = !!contract && !renewal && daysToEnd !== null && daysToEnd >= 0 && daysToEnd <= RENEWAL_WINDOW_DAYS
+  const canRenew = isExpired || isExpiring
 
   return (
     <div className="rounded-xl border border-slate-100 hover:border-slate-200">
@@ -1200,7 +1252,10 @@ function ClientRow({ c, contract, contractMonth, used, total, remaining, nights,
             <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">{pkg.label}</span>
             {contract && <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">{contract.contract_number}</span>}
             {contractMonth && <span className="text-xs bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full">Mes {contractMonth}/3</span>}
-            {dl <= 5 && <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">⚠️ {dl}d</span>}
+            {isExpiring && <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">⚠️ Por vencer · {daysToEnd}d</span>}
+            {isExpired && <span className="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full">Vencido</span>}
+            {renewal && <span className="text-xs bg-green-50 text-green-600 px-2 py-0.5 rounded-full">✓ Renovado · {renewal.contract_number} desde {fmtShort(renewal.month1_start)}</span>}
+            {canRenew && contract.renewal_request === 'no_renovar' && <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">Cliente no renovará</span>}
           </div>
           <div className="text-xs text-slate-400 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
             <span>Vence {end.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
@@ -1215,9 +1270,17 @@ function ClientRow({ c, contract, contractMonth, used, total, remaining, nights,
             {remaining} disp.
           </span>
           <div className="flex gap-1 sm:gap-2 items-center">
+            {canRenew && <button onClick={onRenew} className="text-xs text-green-600 hover:text-green-700 font-medium px-1.5 py-1.5">renovar</button>}
+            {canRenew && <button onClick={onFinish} className="text-xs text-slate-500 hover:text-slate-700 px-1.5 py-1.5">finalizar</button>}
+            {renewal && renewal.status === 'upcoming' && <button onClick={() => onCancelRenewal(renewal)} className="text-xs text-slate-400 hover:text-red-400 px-1.5 py-1.5">anular renovación</button>}
             {contract && (
               <button onClick={() => setExpanded(e => !e)} className="text-xs text-purple-500 hover:text-purple-600 px-1.5 py-1.5">
                 {expanded ? 'ocultar' : 'ver meses'}
+              </button>
+            )}
+            {clientContracts.length > 0 && (
+              <button onClick={() => setShowHistory(h => !h)} className="text-xs text-slate-500 hover:text-slate-700 px-1.5 py-1.5">
+                {showHistory ? 'ocultar historial' : `historial (${clientContracts.length})`}
               </button>
             )}
             <button onClick={onEdit} className="text-xs text-blue-500 hover:text-blue-600 px-1.5 py-1.5">editar</button>
@@ -1276,9 +1339,80 @@ function ClientRow({ c, contract, contractMonth, used, total, remaining, nights,
           })}
         </div>
       )}
+
+      {showHistory && (
+        <div className="border-t border-slate-100 px-3 pb-3 pt-2 space-y-2">
+          <div className="text-xs font-semibold text-slate-500">Historial de contratos</div>
+          {clientContracts.map((ct: any) => {
+            const st = CONTRACT_STATUS[ct.status] || { label: ct.status, color: 'bg-slate-100 text-slate-500' }
+            const ctRes = reservations.filter((r: any) => r.client_id === c.id && r.date >= ct.month1_start && r.date <= ct.month3_end)
+            const ctDay = ctRes.filter((r: any) => countsAgainstQuota(r.date, r.slot)).length
+            const ctNightSun = ctRes.length - ctDay
+            const ctPkg = PACKAGES[ct.package as Package]
+            return (
+              <div key={ct.id} className="rounded-xl p-3 bg-slate-50 border border-slate-100">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-medium text-slate-700">{ct.contract_number}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${st.color}`}>{st.label}</span>
+                  {ctPkg && <span className="text-xs text-slate-500">{ctPkg.label}</span>}
+                  <span className="text-xs text-slate-400 ml-auto">{fmtShort(ct.month1_start)} → {fmtShort(ct.month3_end)}</span>
+                </div>
+                <div className="text-xs text-slate-500 mt-1">
+                  {ctDay} bloques de día{ctNightSun > 0 ? ` · ${ctNightSun} noche/domingo` : ''}
+                  {ct.renewal_request === 'no_renovar' && ' · el cliente indicó que no renovaría'}
+                  {ct.finished_at && ` · cerrado el ${fmtShort(ct.finished_at)}`}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
+
+function RenewContractModal({ client, contract, onClose, onSave }: { client: Client; contract: any; onClose: () => void; onSave: (pkg: string, start: string) => Promise<void> }) {
+  const defaultStart = (() => {
+    const d = new Date(contract.month3_end + 'T12:00:00'); d.setDate(d.getDate() + 1)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  })()
+  const [pkg, setPkg] = useState<string>(contract.package || client.package)
+  const [start, setStart] = useState(defaultStart)
+  const [saving, setSaving] = useState(false)
+  const newDeposit = PACKAGES[pkg as Package].price * 0.5
+  const depositDiff = newDeposit - (client.deposit_amount || 0)
+  return (
+    <Modal title={`Renovar ${contract.contract_number}`} onClose={onClose}>
+      <div className="space-y-3 text-sm">
+        <p className="text-slate-500 text-xs">Se crea el contrato <strong>{renewalContractNumber(contract.contract_number)}</strong> por 3 meses. El contrato actual queda en el historial con sus reservas.</p>
+        <div>
+          <label className="text-xs text-slate-500 mb-1 block">Paquete</label>
+          <select value={pkg} onChange={e => setPkg(e.target.value)} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white">
+            {(Object.keys(PACKAGES) as Package[]).map(k => (
+              <option key={k} value={k}>{PACKAGES[k].label} · {fmt$(PACKAGES[k].price)}+IVA</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-slate-500 mb-1 block">Fecha de inicio</label>
+          <input type="date" value={start} onChange={e => setStart(e.target.value)} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
+          {start !== defaultStart && <p className="text-xs text-amber-600 mt-1">El día siguiente al vencimiento es el {fmtShort(defaultStart)}.</p>}
+        </div>
+        {Math.abs(depositDiff) >= 0.01 && client.deposit_amount > 0 && (
+          <p className={`text-xs rounded-lg p-2 ${depositDiff > 0 ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'}`}>
+            Depósito actual {fmt$(client.deposit_amount)} · el del paquete {PACKAGES[pkg as Package].label} es {fmt$(newDeposit)}.
+            {depositDiff > 0 ? ` Hay que cobrar ${fmt$(depositDiff)} de diferencia.` : ` Hay que devolver ${fmt$(-depositDiff)}.`} Actualiza el monto en &quot;editar&quot;.
+          </p>
+        )}
+        <button disabled={saving} onClick={async () => { setSaving(true); await onSave(pkg, start); setSaving(false) }}
+          className="w-full bg-green-600 text-white rounded-xl py-2.5 font-medium hover:bg-green-700 disabled:opacity-50">
+          {saving ? 'Guardando…' : 'Registrar renovación'}
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
 function NewClientModal({ onClose, onSave }: { onClose: () => void; onSave: (d: object) => void }) {
   const today = fmtDate(new Date())
   const [form, setForm] = useState({

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { renewalContractNumber, RENEWAL_WINDOW_DAYS, daysUntil, PACKAGES } from '@/lib/supabase'
 
 // Cliente con service role: las escrituras de contratos no dependen de las políticas RLS
 const supabaseAdmin = createClient(
@@ -39,16 +40,6 @@ function dayAfter(dateStr: string): string {
   const d = new Date(dateStr + 'T12:00:00')
   d.setDate(d.getDate() + 1)
   return fmt(d)
-}
-
-async function generateContractNumber(): Promise<string> {
-  const { data } = await supabaseAdmin.from('contracts').select('contract_number')
-  let maxNum = 0
-  for (const row of data || []) {
-    const match = String(row.contract_number || '').match(/C(\d+)/)
-    if (match) maxNum = Math.max(maxNum, parseInt(match[1]))
-  }
-  return `C${String(maxNum + 1).padStart(3, '0')}`
 }
 
 // Activa automáticamente las renovaciones cuyo periodo ya inició
@@ -98,8 +89,10 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
 
   // ── Renovación (prórroga) de un contrato existente ──
+  // requested_by: 'client' cuando el cliente la confirma desde su portal
   if (body.action === 'renew') {
     const { previous_contract_id, package: pkg } = body
+    const byClient = body.requested_by === 'client'
     if (!previous_contract_id) {
       return NextResponse.json({ error: 'Falta el contrato a renovar' }, { status: 400 })
     }
@@ -115,10 +108,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Este contrato ya tiene una renovación registrada (${existing[0].contract_number})` }, { status: 409 })
     }
 
-    const start_date = body.start_date || dayAfter(prev.month3_end)
-    const num = await generateContractNumber()
-    const suffix = String(prev.contract_number || '').split('-')[1]
-    const contract_number = suffix ? `${num}-${suffix}` : num
+    if (pkg && !(pkg in PACKAGES)) {
+      return NextResponse.json({ error: 'Paquete no válido' }, { status: 400 })
+    }
+
+    // Desde el portal: solo el contrato vigente, dentro de la ventana de renovación,
+    // empezando el día siguiente al vencimiento (el cliente sí puede elegir paquete)
+    if (byClient) {
+      if (prev.status !== 'active') {
+        return NextResponse.json({ error: 'Este contrato ya no está vigente. Comunícate con el administrador.' }, { status: 400 })
+      }
+      const left = daysUntil(prev.month3_end, todaySV())
+      if (left > RENEWAL_WINDOW_DAYS) {
+        return NextResponse.json({ error: `La renovación se habilita ${RENEWAL_WINDOW_DAYS} días antes de que termine tu contrato.` }, { status: 400 })
+      }
+      if (left < 0) {
+        return NextResponse.json({ error: 'Tu contrato ya venció. Comunícate con el administrador para renovarlo.' }, { status: 400 })
+      }
+    }
+
+    const start_date = byClient ? dayAfter(prev.month3_end) : (body.start_date || dayAfter(prev.month3_end))
+    const contract_number = renewalContractNumber(prev.contract_number)
 
     const { data, error } = await supabaseAdmin
       .from('contracts')
@@ -135,10 +145,12 @@ export async function POST(req: NextRequest) {
       .single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+    // La solicitud del cliente queda atendida
+    await supabaseAdmin.from('contracts')
+      .update({ renewal_request: 'renovar', renewal_request_at: new Date().toISOString() })
+      .eq('id', previous_contract_id)
     // Si la renovación se registra cuando su periodo ya empezó, se activa de una vez
     await syncStatuses(prev.client_id)
-    // La solicitud del cliente queda atendida
-    await supabaseAdmin.from('contracts').update({ renewal_request: 'renovar' }).eq('id', previous_contract_id)
 
     return NextResponse.json(data, { status: 201 })
   }
@@ -192,5 +204,12 @@ export async function PATCH(req: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Al anular una renovación, el contrato anterior vuelve a quedar sin respuesta
+  if (status === 'cancelled' && data?.previous_contract_id) {
+    await supabaseAdmin.from('contracts')
+      .update({ renewal_request: null, renewal_request_at: null })
+      .eq('id', data.previous_contract_id)
+  }
   return NextResponse.json(data)
 }
