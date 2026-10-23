@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { renewalContractNumber, RENEWAL_WINDOW_DAYS, daysUntil } from '@/lib/supabase'
+import { renewalContractNumber, RENEWAL_WINDOW_DAYS, daysUntil, PACKAGES } from '@/lib/supabase'
 
 // Cliente con service role: las escrituras de contratos no dependen de las políticas RLS
 const supabaseAdmin = createClient(
@@ -108,8 +108,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Este contrato ya tiene una renovación registrada (${existing[0].contract_number})` }, { status: 409 })
     }
 
+    if (pkg && !(pkg in PACKAGES)) {
+      return NextResponse.json({ error: 'Paquete no válido' }, { status: 400 })
+    }
+
     // Desde el portal: solo el contrato vigente, dentro de la ventana de renovación,
-    // con el mismo paquete y empezando el día siguiente al vencimiento
+    // empezando el día siguiente al vencimiento (el cliente sí puede elegir paquete)
     if (byClient) {
       if (prev.status !== 'active') {
         return NextResponse.json({ error: 'Este contrato ya no está vigente. Comunícate con el administrador.' }, { status: 400 })
@@ -131,7 +135,7 @@ export async function POST(req: NextRequest) {
       .insert({
         contract_number,
         client_id: prev.client_id,
-        package: byClient ? prev.package : (pkg || prev.package),
+        package: pkg || prev.package,
         start_date,
         ...calcContractMonths(start_date),
         status: 'upcoming',

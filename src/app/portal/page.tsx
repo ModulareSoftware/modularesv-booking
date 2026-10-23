@@ -20,6 +20,9 @@ export default function PortalPage() {
   const [activeContract, setActiveContract] = useState<any>(null)
   const [allContracts, setAllContracts] = useState<any[]>([])
   const [renewBusy, setRenewBusy] = useState(false)
+  // Paquete elegido para la renovación (null = selector cerrado)
+  const [renewPick, setRenewPick] = useState<Package | null>(null)
+  const [renewErr, setRenewErr] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
   const [selectedContractMonth, setSelectedContractMonth] = useState<number>(1)
   const [date, setDate] = useState(fmtDate(new Date()))
@@ -88,19 +91,18 @@ setBillingMonths(bills)
     setSelectedContractMonth(m)
   }, [date, allContracts])
 
-  async function confirmRenewal() {
+  async function confirmRenewal(pkgChoice: Package) {
     if (!client || !activeContract) return
-    const pkgLabel = PACKAGES[activeContract.package as Package]?.label || ''
-    if (!confirm(`¿Confirmas que deseas renovar tu contrato por 3 meses más en el Paquete ${pkgLabel}?\n\nEl nuevo periodo empieza el día siguiente al fin de tu contrato actual. El administrador te contactará para firmar la prórroga.`)) return
-    setRenewBusy(true); setAlert(null)
+    setRenewBusy(true); setRenewErr(null); setAlert(null)
     const res = await fetch('/api/contracts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'renew', requested_by: 'client', previous_contract_id: activeContract.id }),
+      body: JSON.stringify({ action: 'renew', requested_by: 'client', previous_contract_id: activeContract.id, package: pkgChoice }),
     })
     const json = await res.json()
     setRenewBusy(false)
-    if (!res.ok) { setAlert({ type: 'err', msg: json.error }); return }
+    if (!res.ok) { setRenewErr(json.error); return }
+    setRenewPick(null)
     setAlert({ type: 'ok', msg: `✅ Renovación confirmada: contrato ${json.contract_number}, del ${fmtShort(json.month1_start)} al ${fmtShort(json.month3_end)}. Ya puedes reservar turnos del nuevo periodo.` })
     loadClientData(client.id)
   }
@@ -218,6 +220,50 @@ setBillingMonths(bills)
   const historyContracts = [...allContracts]
     .filter((ct: any) => ct.status !== 'cancelled')
     .sort((a: any, b: any) => b.month1_start.localeCompare(a.month1_start))
+
+  // Selector de paquete para la renovación
+  const currentPkgKey = (activeContract?.package || client.package) as Package
+  const pickedDeposit = renewPick ? PACKAGES[renewPick].price * 0.5 : 0
+  const depositDiff = pickedDeposit - (client.deposit_amount || 0)
+  const renewPicker = renewPick && (
+    <div className="mt-3 space-y-2">
+      <p className="text-xs font-medium text-slate-600">Elige el paquete para tu nuevo contrato:</p>
+      {(Object.keys(PACKAGES) as Package[]).map(k => {
+        const p = PACKAGES[k]
+        const sel = renewPick === k
+        return (
+          <button key={k} type="button" onClick={() => setRenewPick(k)}
+            className={`w-full text-left rounded-xl border p-2.5 transition-all bg-white ${sel ? 'border-blue-500 ring-1 ring-blue-500' : 'border-slate-200 hover:border-blue-300'}`}>
+            <div className="flex items-center gap-2">
+              <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 ${sel ? 'border-blue-600 bg-blue-600 shadow-[inset_0_0_0_2px_white]' : 'border-slate-300'}`} />
+              <span className="text-sm font-semibold text-slate-700">{p.label}</span>
+              {k === currentPkgKey && <span className="text-[11px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">tu plan actual</span>}
+              <span className="ml-auto text-sm font-semibold text-slate-700 whitespace-nowrap">{fmt$(p.price)}<span className="text-xs font-normal text-slate-400">+IVA/mes</span></span>
+            </div>
+            <div className="text-xs text-slate-500 mt-1 pl-6">
+              {p.dayBlocks} turnos de día{p.nightBlocks > 0 ? ` + ${p.nightBlocks} de noche/domingo` : ' · noches y domingos con cargo extra'} al mes
+            </div>
+          </button>
+        )
+      })}
+      {renewPick !== currentPkgKey && client.deposit_amount > 0 && Math.abs(depositDiff) >= 0.01 && (
+        <p className="text-xs text-slate-600 bg-white rounded-lg border border-slate-200 p-2">
+          Al cambiar a {PACKAGES[renewPick].label}, el depósito de garantía pasa a {fmt$(pickedDeposit)}.
+          {depositDiff > 0 ? ` Tendrás que completar ${fmt$(depositDiff)}.` : ` Se te devolverá la diferencia de ${fmt$(-depositDiff)}.`}
+        </p>
+      )}
+      <p className="text-xs text-slate-500">El nuevo periodo empieza el {activeContract ? fmtShort((() => { const d = new Date(activeContract.month3_end + 'T12:00:00'); d.setDate(d.getDate() + 1); return fmtDate(d) })()) : ''}. El administrador te contactará para firmar la prórroga.</p>
+      {renewErr && <p className="text-xs text-red-600 bg-red-50 rounded-lg p-2">{renewErr}</p>}
+      <div className="grid grid-cols-2 gap-2">
+        <button onClick={() => confirmRenewal(renewPick)} disabled={renewBusy} className="bg-blue-600 text-white rounded-xl py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+          {renewBusy ? 'Procesando…' : 'Confirmar renovación'}
+        </button>
+        <button onClick={() => { setRenewPick(null); setRenewErr(null) }} disabled={renewBusy} className="bg-white border border-slate-200 text-slate-600 rounded-xl py-2.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50">
+          Volver
+        </button>
+      </div>
+    </div>
+  )
   const extraBlockPrice = (client as any).extra_block_price || 25
   const baseNeto = pkg.price
   const nightNeto = nights * client.night_price
@@ -421,24 +467,28 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
             <div className="rounded-2xl border border-slate-200 bg-white p-3 sm:p-4">
               <div className="font-semibold text-slate-700 text-sm">Indicaste que no renovarás</div>
               <p className="text-xs text-slate-500 mt-1">Tu contrato termina el {fmtShort(activeContract.month3_end)}. Si cambias de opinión, puedes renovar mientras siga vigente.</p>
-              <button onClick={confirmRenewal} disabled={renewBusy} className="mt-3 w-full border border-blue-200 text-blue-600 rounded-xl py-2.5 text-sm font-medium hover:bg-blue-50 disabled:opacity-50">
-                Cambié de opinión, deseo renovar
-              </button>
+              {renewPick ? renewPicker : (
+                <button onClick={() => setRenewPick(activeContract.package as Package)} disabled={renewBusy} className="mt-3 w-full border border-blue-200 text-blue-600 rounded-xl py-2.5 text-sm font-medium hover:bg-blue-50 disabled:opacity-50">
+                  Cambié de opinión, deseo renovar
+                </button>
+              )}
             </div>
           ) : (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 sm:p-4">
               <div className="font-semibold text-amber-800 text-sm">
                 Tu contrato termina {daysToEnd === 0 ? 'hoy' : daysToEnd === 1 ? 'mañana' : `en ${daysToEnd} días`} ({fmtShort(activeContract.month3_end)})
               </div>
-              <p className="text-xs text-amber-700 mt-1">¿Deseas renovar por 3 meses más en el Paquete {PACKAGES[activeContract.package as Package]?.label}? Al confirmar podrás reservar turnos del nuevo periodo de inmediato.</p>
+              <p className="text-xs text-amber-700 mt-1">¿Deseas renovar por 3 meses más? Puedes mantener tu Paquete {PACKAGES[activeContract.package as Package]?.label} o cambiar a otro. Al confirmar podrás reservar turnos del nuevo periodo de inmediato.</p>
+              {renewPick ? renewPicker : (
               <div className="grid grid-cols-2 gap-2 mt-3">
-                <button onClick={confirmRenewal} disabled={renewBusy} className="bg-blue-600 text-white rounded-xl py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                <button onClick={() => setRenewPick(activeContract.package as Package)} disabled={renewBusy} className="bg-blue-600 text-white rounded-xl py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
                   {renewBusy ? 'Procesando…' : 'Sí, renovar'}
                 </button>
                 <button onClick={declineRenewal} disabled={renewBusy} className="bg-white border border-slate-200 text-slate-600 rounded-xl py-2.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50">
                   No renovaré
                 </button>
               </div>
+              )}
             </div>
           )
         )}
