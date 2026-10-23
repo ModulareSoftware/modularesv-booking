@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase, Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getVigencyEnd, ADMIN_EMAIL, isSunday, countsAgainstQuota, displayName, fmt$, DEPOSIT_STATUS, quotaDate } from '@/lib/supabase'
+import { supabase, Client, Reservation, PACKAGES, SLOTS, fmtDate, daysLeft, getVigencyEnd, ADMIN_EMAIL, isSunday, countsAgainstQuota, displayName, fmt$, DEPOSIT_STATUS, quotaDate, RENEWAL_WINDOW_DAYS, daysUntil, fmtShort, CONTRACT_STATUS, Package } from '@/lib/supabase'
 import { BillHeader, BillLine } from '@/components/BillLine'
 import InstallPrompt from '@/components/InstallPrompt'
 
@@ -15,7 +15,12 @@ export default function PortalPage() {
   const [reservations, setReservations] = useState<Reservation[]>([])
   const [allReservations, setAllReservations] = useState<Reservation[]>([])
   const [billingMonths, setBillingMonths] = useState<any[]>([])
+  // contract = contrato que se está viendo (vigente o su renovación); activeContract = el vigente
   const [contract, setContract] = useState<any>(null)
+  const [activeContract, setActiveContract] = useState<any>(null)
+  const [allContracts, setAllContracts] = useState<any[]>([])
+  const [renewBusy, setRenewBusy] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
   const [selectedContractMonth, setSelectedContractMonth] = useState<number>(1)
   const [date, setDate] = useState(fmtDate(new Date()))
   const [slot, setSlot] = useState('morning')
@@ -56,8 +61,10 @@ export default function PortalPage() {
     const bills = await billRes.json()
 setBillingMonths(bills)
     const cons = await conRes.json()
+    setAllContracts(Array.isArray(cons) ? cons : [])
     if (cons.length > 0) {
-      const activeContract = cons.find((c: any) => c.status === 'active')
+      const activeContract = cons.find((c: any) => c.status === 'active') || cons.find((c: any) => c.status === 'upcoming')
+      setActiveContract(activeContract || null)
       if (activeContract) {
         setContract(activeContract)
         const today = new Date()
@@ -68,6 +75,47 @@ setBillingMonths(bills)
         setSelectedContractMonth(currentMonth)
       }
     }
+  }
+
+  // Al elegir una fecha, mostrar el contrato y el mes al que pertenece
+  // (así los cupos y avisos corresponden a esa fecha, incluso en la renovación)
+  useEffect(() => {
+    const candidates = allContracts.filter((c: any) => c.status === 'active' || c.status === 'upcoming')
+    const target = candidates.find((c: any) => date >= c.month1_start && date <= c.month3_end)
+    if (!target) return
+    const m = [1, 2, 3].find(n => date >= target[`month${n}_start`] && date <= target[`month${n}_end`]) || 1
+    setContract(target)
+    setSelectedContractMonth(m)
+  }, [date, allContracts])
+
+  async function confirmRenewal() {
+    if (!client || !activeContract) return
+    const pkgLabel = PACKAGES[activeContract.package as Package]?.label || ''
+    if (!confirm(`¿Confirmas que deseas renovar tu contrato por 3 meses más en el Paquete ${pkgLabel}?\n\nEl nuevo periodo empieza el día siguiente al fin de tu contrato actual. El administrador te contactará para firmar la prórroga.`)) return
+    setRenewBusy(true); setAlert(null)
+    const res = await fetch('/api/contracts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'renew', requested_by: 'client', previous_contract_id: activeContract.id }),
+    })
+    const json = await res.json()
+    setRenewBusy(false)
+    if (!res.ok) { setAlert({ type: 'err', msg: json.error }); return }
+    setAlert({ type: 'ok', msg: `✅ Renovación confirmada: contrato ${json.contract_number}, del ${fmtShort(json.month1_start)} al ${fmtShort(json.month3_end)}. Ya puedes reservar turnos del nuevo periodo.` })
+    loadClientData(client.id)
+  }
+
+  async function declineRenewal() {
+    if (!client || !activeContract) return
+    if (!confirm('¿Confirmas que no renovarás tu contrato? Puedes cambiar de opinión mientras tu contrato siga vigente.')) return
+    setRenewBusy(true)
+    await fetch('/api/contracts', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: activeContract.id, renewal_request: 'no_renovar' }),
+    })
+    setRenewBusy(false)
+    loadClientData(client.id)
   }
 
   async function logout() {
@@ -149,14 +197,27 @@ setBillingMonths(bills)
   // Días restantes del mes de contrato en curso y fin de vigencia del contrato
   // (sin contrato se mantiene el cálculo anterior de 30 días desde el inicio)
   const nowD = new Date()
-  const curMonthEnd = contract
-    ? [1, 2, 3].map(m => new Date(contract[`month${m}_end`] + 'T23:59:59'))
-        .find((e, i) => nowD >= new Date(contract[`month${i + 1}_start`] + 'T00:00:00') && nowD <= e)
+  const curC = activeContract || contract
+  const curMonthEnd = curC
+    ? [1, 2, 3].map(m => new Date(curC[`month${m}_end`] + 'T23:59:59'))
+        .find((e, i) => nowD >= new Date(curC[`month${i + 1}_start`] + 'T00:00:00') && nowD <= e)
     : null
-  const dl = contract
+  const dl = curC
     ? (curMonthEnd ? Math.max(0, Math.ceil((curMonthEnd.getTime() - nowD.getTime()) / 86400000)) : 0)
     : daysLeft(client.start_date)
-  const end = contract ? new Date(contract.month3_end + 'T12:00:00') : getVigencyEnd(client.start_date)
+  const end = curC ? new Date(curC.month3_end + 'T12:00:00') : getVigencyEnd(client.start_date)
+
+  // Renovación del contrato vigente
+  const renewal = activeContract
+    ? allContracts.find((ct: any) => ct.previous_contract_id === activeContract.id && ct.status !== 'cancelled')
+    : null
+  const daysToEnd = activeContract ? daysUntil(activeContract.month3_end) : null
+  const inRenewalWindow = !!activeContract && activeContract.status === 'active' && !renewal && daysToEnd !== null && daysToEnd <= RENEWAL_WINDOW_DAYS
+  const beyondContract = !!activeContract && !renewal && date > activeContract.month3_end
+  const viewableContracts = [activeContract, renewal].filter(Boolean)
+  const historyContracts = [...allContracts]
+    .filter((ct: any) => ct.status !== 'cancelled')
+    .sort((a: any, b: any) => b.month1_start.localeCompare(a.month1_start))
   const extraBlockPrice = (client as any).extra_block_price || 25
   const baseNeto = pkg.price
   const nightNeto = nights * client.night_price
@@ -184,7 +245,7 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
   const isSelectedSunday = isSunday(date)
   const isSelectedNight = slot === 'night'
   const isExtraBlock = !isSelectedSunday && !isSelectedNight && remaining <= 0 && (slot === 'morning' || slot === 'afternoon') && !isSunday(date)
-  const canBook = isSelectedSunday || isSelectedNight || remaining > 0 || isExtraBlock
+  const canBook = (isSelectedSunday || isSelectedNight || remaining > 0 || isExtraBlock) && !beyondContract
 
   // Adelantar turno del mes siguiente (solo clientes habilitados)
   const dateContractMonth = contract ? ([1, 2, 3].find(m => date >= contract[`month${m}_start`] && date <= contract[`month${m}_end`]) || null) : null
@@ -257,13 +318,28 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
               <div className="font-semibold leading-snug break-words">{displayName(client)}</div>
               {client.company_name && <div className="text-xs text-slate-400">{client.name}</div>}
               <div className="text-xs text-slate-400">Paquete {pkg.label} · {fmt$(pkg.price)}+IVA/mes</div>
-              {contract && <div className="text-xs text-slate-500 font-medium mt-0.5">{contract.contract_number}</div>}
+              {curC && <div className="text-xs text-slate-500 font-medium mt-0.5">{curC.contract_number}</div>}
             </div>
             <span className={`text-xs px-2.5 py-1.5 rounded-xl font-medium text-center leading-tight flex-shrink-0 ${dl <= 5 ? 'bg-amber-50 text-amber-600' : 'bg-blue-50 text-blue-600'}`}>
               <span className="text-base font-semibold block">{dl}d</span>
               <span className="text-[11px] font-normal">restantes</span>
             </span>
           </div>
+
+          {/* Selector de contrato (vigente / renovación) */}
+          {viewableContracts.length > 1 && (
+            <div className="flex flex-wrap gap-1 mb-2">
+              {viewableContracts.map((ct: any) => {
+                const isSel = contract?.id === ct.id
+                return (
+                  <button key={ct.id} onClick={() => { setContract(ct); setSelectedContractMonth(ct.status === 'upcoming' ? 1 : (currentContractMonthOf(ct) || 1)) }}
+                    className={`text-xs px-2.5 py-1 rounded-full border transition-all whitespace-nowrap ${isSel ? 'bg-slate-800 text-white border-slate-800' : 'border-slate-200 text-slate-500 hover:border-slate-400'}`}>
+                    {ct.contract_number} · {ct.status === 'upcoming' ? 'nuevo' : 'actual'}
+                  </button>
+                )
+              })}
+            </div>
+          )}
 
           {/* Selector de mes del contrato */}
           {contract && (
@@ -298,8 +374,80 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
           <div className="mt-3 h-2 bg-slate-100 rounded-full overflow-hidden">
             <div className={`h-full rounded-full ${pct >= 100 ? 'bg-red-400' : pct >= 75 ? 'bg-amber-400' : 'bg-blue-400'}`} style={{ width: `${pct}%` }} />
           </div>
-          <div className="text-xs text-slate-400 mt-2">Vigencia hasta {end.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
+          <div className="text-xs text-slate-400 mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span>Vigencia hasta {end.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}{renewal ? ` · renovado hasta ${fmtShort(renewal.month3_end)}` : ''}</span>
+            {historyContracts.length > 0 && (
+              <button onClick={() => setShowHistory(h => !h)} className="ml-auto text-blue-600 hover:underline py-1">
+                {showHistory ? 'Ocultar contratos' : `Mis contratos (${historyContracts.length})`}
+              </button>
+            )}
+          </div>
+
+          {showHistory && (
+            <div className="mt-2 space-y-2">
+              {historyContracts.map((ct: any) => {
+                const st = ct.status === 'upcoming'
+                  ? { label: 'Próximo', color: CONTRACT_STATUS.upcoming.color }
+                  : (CONTRACT_STATUS[ct.status] || { label: ct.status, color: 'bg-slate-100 text-slate-500' })
+                const ctRes = reservations.filter(r => r.date >= ct.month1_start && r.date <= ct.month3_end)
+                const ctDay = ctRes.filter(r => countsAgainstQuota(r.date, r.slot)).length
+                const ctNightSun = ctRes.length - ctDay
+                return (
+                  <div key={ct.id} className="rounded-xl bg-slate-50 border border-slate-100 p-2.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium text-slate-700">{ct.contract_number}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${st.color}`}>{st.label}</span>
+                      <span className="text-xs text-slate-500">{PACKAGES[ct.package as Package]?.label}</span>
+                    </div>
+                    <div className="text-xs text-slate-400 mt-0.5">
+                      {fmtShort(ct.month1_start)} → {fmtShort(ct.month3_end)} · {ctDay} bloques de día{ctNightSun > 0 ? ` · ${ctNightSun} noche/domingo` : ''}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
+
+        {/* Renovación del contrato */}
+        {renewal && renewal.status === 'upcoming' && (
+          <div className="rounded-2xl border border-green-200 bg-green-50 p-3 sm:p-4">
+            <div className="font-semibold text-green-800 text-sm">✓ Renovación confirmada · {renewal.contract_number}</div>
+            <p className="text-xs text-green-700 mt-1">Tu nuevo periodo va del {fmtShort(renewal.month1_start)} al {fmtShort(renewal.month3_end)}. Ya puedes reservar turnos de ese periodo, con hasta 2 semanas de anticipación.</p>
+          </div>
+        )}
+        {inRenewalWindow && daysToEnd !== null && daysToEnd >= 0 && (
+          activeContract.renewal_request === 'no_renovar' ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-3 sm:p-4">
+              <div className="font-semibold text-slate-700 text-sm">Indicaste que no renovarás</div>
+              <p className="text-xs text-slate-500 mt-1">Tu contrato termina el {fmtShort(activeContract.month3_end)}. Si cambias de opinión, puedes renovar mientras siga vigente.</p>
+              <button onClick={confirmRenewal} disabled={renewBusy} className="mt-3 w-full border border-blue-200 text-blue-600 rounded-xl py-2.5 text-sm font-medium hover:bg-blue-50 disabled:opacity-50">
+                Cambié de opinión, deseo renovar
+              </button>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 sm:p-4">
+              <div className="font-semibold text-amber-800 text-sm">
+                Tu contrato termina {daysToEnd === 0 ? 'hoy' : daysToEnd === 1 ? 'mañana' : `en ${daysToEnd} días`} ({fmtShort(activeContract.month3_end)})
+              </div>
+              <p className="text-xs text-amber-700 mt-1">¿Deseas renovar por 3 meses más en el Paquete {PACKAGES[activeContract.package as Package]?.label}? Al confirmar podrás reservar turnos del nuevo periodo de inmediato.</p>
+              <div className="grid grid-cols-2 gap-2 mt-3">
+                <button onClick={confirmRenewal} disabled={renewBusy} className="bg-blue-600 text-white rounded-xl py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                  {renewBusy ? 'Procesando…' : 'Sí, renovar'}
+                </button>
+                <button onClick={declineRenewal} disabled={renewBusy} className="bg-white border border-slate-200 text-slate-600 rounded-xl py-2.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50">
+                  No renovaré
+                </button>
+              </div>
+            </div>
+          )
+        )}
+        {inRenewalWindow && daysToEnd !== null && daysToEnd < 0 && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-3 sm:p-4">
+            <div className="font-semibold text-red-700 text-sm">Tu contrato venció el {fmtShort(activeContract.month3_end)}</div>
+            <p className="text-xs text-red-600 mt-1">Comunícate con el administrador si deseas renovarlo.</p>
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="flex bg-slate-100 rounded-xl p-1 gap-1">
@@ -330,7 +478,13 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
                 </div>
               </div>
               <p className="text-xs text-slate-400 mb-3">📅 Puedes reservar con hasta 2 semanas de anticipación — la fecha más lejana disponible hoy es el {new Date(maxBookableDate + 'T12:00:00').toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' })}. Vuelve más adelante para reservar fechas posteriores.</p>
-              {(isSelectedSunday || isSelectedNight) && (
+              {beyondContract && (
+                <p className="text-xs text-red-600 bg-red-50 rounded-lg p-2 mb-3">
+                  Esta fecha es posterior al fin de tu contrato ({fmtShort(activeContract.month3_end)}).
+                  {inRenewalWindow && (daysToEnd ?? -1) >= 0 ? ' Confirma la renovación arriba para poder reservarla.' : ' Comunícate con el administrador.'}
+                </p>
+              )}
+              {!beyondContract && (isSelectedSunday || isSelectedNight) && (
                 remainingNight > 0
                   ? <p className="text-xs text-green-600 bg-green-50 rounded-lg p-2 mb-3">✓ Incluido en tu paquete ({remainingNight} turno{remainingNight === 1 ? '' : 's'} de noche/domingo disponibles este mes).</p>
                   : <p className="text-xs text-purple-600 bg-purple-50 rounded-lg p-2 mb-3">Cupo de noche/domingo agotado: costo extra de <strong>{fmt$(isSelectedSunday ? (client.sunday_price || 25) : client.night_price)}</strong> por turno.</p>
@@ -352,7 +506,7 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
               <button onClick={makeReservation} disabled={saving || !canBook} className="w-full bg-blue-600 text-white rounded-xl py-3 sm:py-2.5 text-base sm:text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                 {saving ? 'Confirmando…' : '📅 Confirmar reserva'}
               </button>
-              {!canBook && <p className="text-xs text-red-500 text-center mt-2">No tienes bloques disponibles en tu paquete actual.</p>}
+              {!canBook && !beyondContract && <p className="text-xs text-red-500 text-center mt-2">No tienes bloques disponibles en tu paquete actual.</p>}
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4">
@@ -538,6 +692,14 @@ const pkgStatus = selectedBillingMonth?.package_status || 'pendiente'
       </div>
     </div>
   )
+}
+
+function currentContractMonthOf(ct: any): number | null {
+  const t = new Date()
+  for (const m of [1, 2, 3]) {
+    if (t >= new Date(ct[`month${m}_start`] + 'T00:00:00') && t <= new Date(ct[`month${m}_end`] + 'T23:59:59')) return m
+  }
+  return null
 }
 
 function StatusRow({ date, status }: { date: string; status: { label: string; color: string } }) {
